@@ -136,35 +136,49 @@ if ! command -v npm &> /dev/null; then
     exit 1
 fi
 
-# Clean install - remove lock files and cache
+# Clean install - remove old files and cache
+log_debug "Cleaning previous installations..."
+rm -rf node_modules package-lock.json 2>&1 | tee -a "$LOG_FILE" || log_warning "Could not clean old files"
+
 log_debug "Cleaning npm cache..."
 npm cache clean --force 2>&1 | tee -a "$LOG_FILE" || log_warning "npm cache clean had issues"
 
 # Install with legacy peer deps
-log_debug "Installing npm dependencies..."
+log_debug "Installing npm dependencies (this may take 2-3 minutes)..."
 if npm install --legacy-peer-deps 2>&1 | tee -a "$LOG_FILE"; then
-    log_success "npm dependencies installed"
+    log_success "npm dependencies installed successfully"
 else
     log_error "Failed to install npm dependencies"
     log_info "Attempting npm install again with verbose output..."
-    npm install --legacy-peer-deps --verbose 2>&1 | tee -a "$LOG_FILE"
-    exit 1
+    if npm install --legacy-peer-deps --verbose 2>&1 | tee -a "$LOG_FILE"; then
+        log_success "npm dependencies installed on retry"
+    else
+        log_error "npm install failed on retry - cannot proceed"
+        exit 1
+    fi
 fi
 
 # Verify node_modules exists and has required packages
 if [ ! -d "node_modules/next" ]; then
     log_error "Next.js not found in node_modules after install"
+    log_info "Debugging: listing node_modules contents..."
+    ls -la node_modules 2>&1 | tee -a "$LOG_FILE" || true
     exit 1
 fi
 
-log_debug "Frontend dependencies verified"
+if [ ! -d "node_modules/react" ]; then
+    log_error "React not found in node_modules after install"
+    exit 1
+fi
+
+log_success "Frontend dependencies verified (next.js and react found)"
 
 # Build frontend with DOMAIN environment variable
-log_info "Building Next.js frontend..."
+log_info "Building Next.js frontend (this may take 1-2 minutes)..."
 if DOMAIN=$DOMAIN npm run build 2>&1 | tee -a "$LOG_FILE"; then
-    log_success "Next.js frontend build completed successfully"
+    log_success "✓ Next.js frontend build completed successfully"
 else
-    log_error "Frontend build failed - check logs above for details"
+    log_error "Frontend build failed - check logs for TypeScript errors"
     exit 1
 fi
 
