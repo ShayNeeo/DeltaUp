@@ -12,9 +12,9 @@ export default function Preloader({ message = 'Loading...', fullScreen = false }
       <div className="relative w-20 h-20">
         <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-full animate-pulse"></div>
         <div className="absolute inset-2 bg-white rounded-full flex items-center justify-center">
-          <span className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
-            Δ
-          </span>
+          <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+          </svg>
         </div>
       </div>
 
