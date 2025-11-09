@@ -129,17 +129,42 @@ fi
 # Frontend setup
 log_info "📦 Setting up Next.js Frontend..."
 cd "$PROJECT_DIR/frontend"
-if npm install --legacy-peer-deps 2>&1 | tee -a "$LOG_FILE"; then
-    log_debug "npm dependencies installed"
-else
-    log_error "Failed to install npm dependencies"
+
+# Check if npm is available
+if ! command -v npm &> /dev/null; then
+    log_error "npm not found. Node.js may not be properly installed"
     exit 1
 fi
 
-if DOMAIN=$DOMAIN npm run build 2>&1 | tee -a "$LOG_FILE"; then
-    log_success "Next.js frontend build completed"
+# Clean install - remove lock files and cache
+log_debug "Cleaning npm cache..."
+npm cache clean --force 2>&1 | tee -a "$LOG_FILE" || log_warning "npm cache clean had issues"
+
+# Install with legacy peer deps
+log_debug "Installing npm dependencies..."
+if npm install --legacy-peer-deps 2>&1 | tee -a "$LOG_FILE"; then
+    log_success "npm dependencies installed"
 else
-    log_error "Frontend build failed"
+    log_error "Failed to install npm dependencies"
+    log_info "Attempting npm install again with verbose output..."
+    npm install --legacy-peer-deps --verbose 2>&1 | tee -a "$LOG_FILE"
+    exit 1
+fi
+
+# Verify node_modules exists and has required packages
+if [ ! -d "node_modules/next" ]; then
+    log_error "Next.js not found in node_modules after install"
+    exit 1
+fi
+
+log_debug "Frontend dependencies verified"
+
+# Build frontend with DOMAIN environment variable
+log_info "Building Next.js frontend..."
+if DOMAIN=$DOMAIN npm run build 2>&1 | tee -a "$LOG_FILE"; then
+    log_success "Next.js frontend build completed successfully"
+else
+    log_error "Frontend build failed - check logs above for details"
     exit 1
 fi
 
