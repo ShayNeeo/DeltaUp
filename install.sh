@@ -321,7 +321,7 @@ log_debug "Creating frontend systemd service"
 if sudo tee /etc/systemd/system/deltaup-frontend.service > /dev/null <<EOF
 [Unit]
 Description=DeltaUp Frontend Service
-After=network.target
+After=network.target deltaup-backend.service
 
 [Service]
 Type=simple
@@ -329,7 +329,7 @@ User=$USER
 WorkingDirectory=$PROJECT_DIR/frontend
 Environment="NODE_ENV=production"
 Environment="NEXT_PUBLIC_API_URL=https://$DOMAIN"
-ExecStart=$(which node) /root/.nvm/versions/node/*/bin/next start
+ExecStart=/usr/bin/node $PROJECT_DIR/frontend/.next/standalone/server.js
 Restart=always
 RestartSec=10
 

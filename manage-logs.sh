@@ -179,12 +179,12 @@ analyze_logs() {
     echo -e "${BLUE}Analyzing: $latest_log${NC}"
     echo ""
     
-    # Count different log levels
-    local info_count=$(grep -c "^\[INFO\]" "$latest_log" 2>/dev/null || echo 0)
-    local success_count=$(grep -c "^\[✓\]" "$latest_log" 2>/dev/null || echo 0)
-    local warning_count=$(grep -c "^\[!\]" "$latest_log" 2>/dev/null || echo 0)
-    local error_count=$(grep -c "^\[✗\]" "$latest_log" 2>/dev/null || echo 0)
-    local debug_count=$(grep -c "^\[DEBUG\]" "$latest_log" 2>/dev/null || echo 0)
+    # Count different log levels (using proper number extraction)
+    local info_count=$(grep -c "^\[INFO\]" "$latest_log" 2>/dev/null | tail -1 || echo 0)
+    local success_count=$(grep -c "^\[✓\]" "$latest_log" 2>/dev/null | tail -1 || echo 0)
+    local warning_count=$(grep -c "^\[!\]" "$latest_log" 2>/dev/null | tail -1 || echo 0)
+    local error_count=$(grep -c "^\[✗\]" "$latest_log" 2>/dev/null | tail -1 || echo 0)
+    local debug_count=$(grep -c "^\[DEBUG\]" "$latest_log" 2>/dev/null | tail -1 || echo 0)
     
     echo -e "${GREEN}✓ Success Messages:${NC}   $success_count"
     echo -e "${BLUE}ℹ Info Messages:${NC}     $info_count"
