@@ -92,7 +92,7 @@ else
     exit 1
 fi
 
-# Check if Node.js is installed
+# Check if Node.js is installed and get version
 if ! command -v node &> /dev/null; then
     log_info "📦 Installing Node.js v22 (Latest LTS)..."
     if curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - 2>&1 | tee -a "$LOG_FILE"; then
@@ -109,7 +109,27 @@ if ! command -v node &> /dev/null; then
         exit 1
     fi
 else
+    CURRENT_NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
     log_info "Node.js already installed: $(node --version)"
+    
+    if [ "$CURRENT_NODE_VERSION" -lt 22 ]; then
+        log_warning "⚠️ Node.js v$CURRENT_NODE_VERSION detected - upgrading to v22..."
+        if curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - 2>&1 | tee -a "$LOG_FILE"; then
+            log_debug "Node.js v22 repository added"
+        else
+            log_error "Failed to add Node.js v22 repository"
+            exit 1
+        fi
+        
+        if sudo apt-get install -y -qq nodejs 2>&1 | tee -a "$LOG_FILE"; then
+            log_success "Node.js upgraded to: $(node --version)"
+        else
+            log_error "Failed to upgrade Node.js"
+            exit 1
+        fi
+    else
+        log_success "Node.js v$CURRENT_NODE_VERSION meets requirements"
+    fi
 fi
 
 # Check if Rust is installed
