@@ -227,6 +227,29 @@ done
 
 log_success "✓ All required packages verified: next, react, react-dom, axios"
 
+# Generate Next.js TypeScript environment file
+log_info "📝 Generating Next.js TypeScript environment..."
+if npx next telemetry disable 2>&1 >> "$LOG_FILE" && npx next build --dry-run 2>&1 >> "$LOG_FILE" || true; then
+    log_debug "Next.js TypeScript environment initialized"
+else
+    log_warning "Failed to initialize Next.js TypeScript environment"
+fi
+
+# Ensure next-env.d.ts exists
+if [ ! -f "next-env.d.ts" ]; then
+    log_info "🔧 Creating next-env.d.ts file..."
+    cat > next-env.d.ts << 'EOF'
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/basic-features/typescript for more information.
+EOF
+    log_success "✓ next-env.d.ts created"
+else
+    log_debug "next-env.d.ts already exists"
+fi
+
 # Build frontend with DOMAIN environment variable
 log_info "Building Next.js frontend (this may take 1-2 minutes)..."
 if DOMAIN=$DOMAIN npm run build 2>&1 | tee -a "$LOG_FILE"; then
