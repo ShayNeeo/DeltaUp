@@ -188,7 +188,18 @@ fi
 
 # Install dependencies with correct environment for Tailwind v4
 log_info "📥 Installing npm dependencies..."
-npm install --no-audit --no-fund 2>&1 | tee -a "$LOG_FILE"
+if npm install --no-audit --no-fund 2>&1 | tee -a "$LOG_FILE"; then
+    :
+else
+    # Fallback to legacy-peer-deps if standard install fails
+    log_warning "Standard npm install failed, retrying with --legacy-peer-deps..."
+    if npm install --legacy-peer-deps --no-audit --no-fund 2>&1 | tee -a "$LOG_FILE"; then
+        :
+    else
+        log_error "❌ npm install failed with both standard and legacy modes"
+        exit 1
+    fi
+fi
 
 # Check if install actually succeeded by verifying node_modules was created
 if [ ! -d "node_modules" ]; then
