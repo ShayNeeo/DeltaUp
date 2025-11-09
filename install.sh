@@ -188,23 +188,33 @@ fi
 
 # Install dependencies with correct environment for Tailwind v4
 log_info "📥 Installing npm dependencies..."
-if NODE_ENV=production NEXT_PUBLIC_API_URL=https://$DOMAIN npm install --legacy-peer-deps 2>&1 | tee -a "$LOG_FILE"; then
-    log_success "✓ Dependencies installed successfully"
-    
-    # Verify Tailwind v4 packages are installed
-    if [ ! -d "node_modules/tailwindcss" ]; then
-        log_error "❌ tailwindcss not found"
-        exit 1
-    fi
-    if [ ! -d "node_modules/postcss" ]; then
-        log_error "❌ postcss not found"
-        exit 1
-    fi
-    log_success "✓ Tailwind v4 packages verified"
-else
-    log_error "npm install failed"
+npm install --no-audit --no-fund 2>&1 | tee -a "$LOG_FILE"
+
+# Check if install actually succeeded by verifying node_modules was created
+if [ ! -d "node_modules" ]; then
+    log_error "❌ npm install failed - node_modules directory not created"
+    log_info "npm version: $(npm --version)"
+    log_info "node version: $(node --version)"
     exit 1
 fi
+
+log_success "✓ Dependencies installed successfully"
+
+# Verify key packages are installed
+if [ ! -d "node_modules/next" ]; then
+    log_error "❌ next package not found"
+    exit 1
+fi
+if [ ! -d "node_modules/tailwindcss" ]; then
+    log_error "❌ tailwindcss package not found"
+    log_info "Available packages in node_modules: $(ls -1 node_modules | head -20)"
+    exit 1
+fi
+if [ ! -d "node_modules/postcss" ]; then
+    log_error "❌ postcss package not found"
+    exit 1
+fi
+log_success "✓ Essential packages verified: next, tailwindcss, postcss"
 
 # Build frontend
 log_info "Building Next.js frontend..."
