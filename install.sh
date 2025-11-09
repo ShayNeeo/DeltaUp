@@ -157,13 +157,12 @@ fi
 log_info "🔒 Setting up SSL Certificate with Let's Encrypt..."
 CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
 if [ ! -d "$CERT_DIR" ]; then
-    log_info "Generating new certificate for $DOMAIN..."
+    log_info "Generating new certificate for $DOMAIN (www subdomain excluded)..."
     if sudo certbot certonly --standalone \
         --non-interactive \
         --agree-tos \
         --email $EMAIL \
         -d $DOMAIN \
-        -d www.$DOMAIN \
         --preferred-challenges http 2>&1 | tee -a "$LOG_FILE"; then
         log_success "SSL certificate generated successfully!"
     else

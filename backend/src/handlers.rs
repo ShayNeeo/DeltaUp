@@ -18,7 +18,7 @@ pub async fn transfer(
 ) -> HttpResponse {
     // Verify JWT token
     match verify_token(&req) {
-        Ok(user_id) => {
+        Ok(_user_id) => {
             let transaction_id = Uuid::new_v4().to_string();
             
             // Validation
@@ -72,7 +72,7 @@ pub async fn get_balance(req: HttpRequest) -> HttpResponse {
 
 pub async fn qr_payment(
     req: HttpRequest,
-    body: web::Json<QRPaymentRequest>,
+    _body: web::Json<QRPaymentRequest>,
 ) -> HttpResponse {
     match verify_token(&req) {
         Ok(_user_id) => {

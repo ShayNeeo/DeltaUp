@@ -1,5 +1,4 @@
 use actix_web::{web, HttpResponse};
-use serde_json::json;
 use crate::models::*;
 use crate::auth::create_token;
 use uuid::Uuid;
