@@ -281,16 +281,11 @@ server {
     }
 }
 
-# HTTPS/HTTP2/HTTP3 configuration
+# HTTPS configuration
 server {
-    # HTTPS with HTTP/2
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    
-    # HTTP/3 with QUIC
-    listen 443 quic reuseport;
-    listen [::]:443 quic reuseport;
-    
+
     server_name $DOMAIN www.$DOMAIN;
 
     # TLS Configuration
@@ -301,10 +296,7 @@ server {
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
     ssl_prefer_server_ciphers on;
-    
-    # HTTP/3 QUIC support
-    add_header Alt-Svc 'h3=":443"; ma=2592000' always;
-    
+
     # Security headers
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
