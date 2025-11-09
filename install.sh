@@ -326,7 +326,7 @@ server {
 
     # Serve Next.js static files directly
     location /_next/static/ {
-        alias $PROJECT_DIR/frontend/.next/static/;
+        alias /opt/deltaup/frontend/.next/static/;
         expires 1y;
         add_header Cache-Control "public, immutable";
         access_log off;
