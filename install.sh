@@ -229,17 +229,29 @@ log_success "✓ Essential packages verified: next, tailwindcss, postcss"
 
 # Build frontend
 log_info "Building Next.js frontend..."
+log_debug "NODE_ENV=production, NEXT_PUBLIC_API_URL=https://$DOMAIN"
+log_debug "Tailwind version: $(npm ls tailwindcss 2>/dev/null | grep tailwindcss || echo 'not found')"
+log_debug "PostCSS config:"
+log_debug "$(cat postcss.config.js || echo 'postcss.config.js not found')"
 
 if NODE_ENV=production NEXT_PUBLIC_API_URL=https://$DOMAIN npm run build 2>&1 | tee -a "$LOG_FILE"; then
     log_success "✓ Next.js frontend build completed successfully"
+    
+    # Debug: Show complete .next structure
+    log_debug "📁 .next directory structure:"
+    find .next -type f -name "*.css" 2>/dev/null | head -20 | while read f; do log_debug "  Found CSS: $f"; done
     
     # Verify build output contains CSS
     if [ ! -d ".next/static/css" ] || [ -z "$(ls -A .next/static/css/ 2>/dev/null)" ]; then
         log_warning "⚠️  Warning: No CSS files found in .next/static/css/"
         log_info "Checking .next directory structure..."
-        ls -la .next/static/ 2>&1 | tee -a "$LOG_FILE"
+        find .next -type d | head -20 2>&1 | tee -a "$LOG_FILE"
+        log_info "Looking for any CSS files in .next:"
+        find .next -name "*.css" 2>&1 | tee -a "$LOG_FILE"
     else
         log_success "✓ CSS files generated in .next/static/css/"
+        log_info "CSS files:"
+        ls -lh .next/static/css/ 2>&1 | tee -a "$LOG_FILE"
     fi
     
     # Fix permissions so frontend service can read files

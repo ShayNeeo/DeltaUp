@@ -1,7 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
-import QRCode from 'qrcode.react'
 import axios from 'axios'
+import QRCode from 'qrcode'
 
 interface QRData {
   account?: string
@@ -17,6 +17,7 @@ export default function QRPayment() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [qrDataUrl, setQrDataUrl] = useState('')
 
   const handleGenerateQR = async () => {
     if (!amount) {
@@ -35,7 +36,12 @@ export default function QRPayment() {
         timestamp: new Date().toISOString(),
       }
       
-      setQrValue(JSON.stringify(qrData))
+      const qrString = JSON.stringify(qrData)
+      setQrValue(qrString)
+      
+      // Generate QR code as data URL
+      const dataUrl = await QRCode.toDataURL(qrString)
+      setQrDataUrl(dataUrl)
       setSuccess('QR code generated successfully! 🎉')
     } catch (err) {
       setError('Failed to generate QR code')
@@ -159,11 +165,11 @@ export default function QRPayment() {
                 {loading ? '⏳ Generating...' : '📱 Generate QR Code'}
               </button>
 
-              {qrValue && (
+              {qrDataUrl && (
                 <div className="mt-8 flex flex-col items-center p-6 bg-slate-50 rounded-lg border-2 border-dashed border-slate-300">
                   <p className="text-slate-600 mb-6 font-semibold">Scan this QR code to pay:</p>
                   <div className="bg-white p-4 rounded-lg border border-slate-200">
-                    <QRCode value={qrValue} size={256} level="H" includeMargin={true} />
+                    <img src={qrDataUrl} alt="QR Code" className="w-64 h-64" />
                   </div>
                   <p className="text-sm text-slate-500 mt-4">Amount: ${amount} USD</p>
                 </div>
