@@ -1,0 +1,15 @@
+node_modules
+target
+.DS_Store
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.local
+*.log
+.next
+dist
+build
+
+guide.md
+DEPLOYMENT.md

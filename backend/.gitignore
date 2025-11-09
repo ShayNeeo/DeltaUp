@@ -1,0 +1,11 @@
+target/
+Cargo.lock
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.local
+.DS_Store
+*.swp
+*.swo
+
