@@ -304,14 +304,6 @@ server {
 
     client_max_body_size 50M;
 
-    # Serve Next.js static files directly (highest priority)
-    location /_next/static/ {
-        root __PROJECT_DIR__/frontend/.next/;
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-        access_log off;
-    }
-
     # API routes to backend
     location /api/ {
         proxy_pass http://deltaup_backend;
@@ -332,7 +324,7 @@ server {
         proxy_redirect off;
     }
 
-    # Frontend - catch all other routes
+    # Frontend - proxy all routes including static files to Next.js app
     location / {
         proxy_pass http://deltaup_frontend;
         proxy_set_header Host \$host;
@@ -345,12 +337,13 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
+
+        # Allow Next.js to handle cache headers for static files
+        proxy_cache_bypass \$http_pragma \$http_authorization;
     }
 }
 EOF
 then
-    # Replace placeholder with actual project directory
-    sudo sed -i "s|__PROJECT_DIR__|$PROJECT_DIR|g" /etc/nginx/sites-available/$DOMAIN
     log_success "Nginx configuration created"
 else
     log_error "Failed to create Nginx configuration"
