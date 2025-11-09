@@ -94,8 +94,8 @@ fi
 
 # Check if Node.js is installed
 if ! command -v node &> /dev/null; then
-    log_info "📦 Installing Node.js v18..."
-    if curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash - 2>&1 | tee -a "$LOG_FILE"; then
+    log_info "📦 Installing Node.js v22 (Latest LTS)..."
+    if curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - 2>&1 | tee -a "$LOG_FILE"; then
         log_debug "Node.js repository added"
     else
         log_error "Failed to add Node.js repository"
