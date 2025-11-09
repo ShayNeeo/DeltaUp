@@ -420,7 +420,6 @@ EOF
     # Frontend service
     log_debug "Creating frontend systemd service"
     FRONTEND_USER=$(whoami)
-    NEXT_BIN="$PROJECT_DIR/frontend/node_modules/.bin/next"
     if sudo tee /etc/systemd/system/deltaup-frontend.service > /dev/null <<EOF
 [Unit]
 Description=DeltaUp Frontend Service
@@ -432,7 +431,8 @@ User=$FRONTEND_USER
 WorkingDirectory=$PROJECT_DIR/frontend
 Environment="NODE_ENV=production"
 Environment="NEXT_PUBLIC_API_URL=https://$DOMAIN"
-ExecStart=$NEXT_BIN start -p 3000
+Environment="PORT=3000"
+ExecStart=/usr/bin/npm start
 Restart=always
 RestartSec=10
 StandardOutput=journal
