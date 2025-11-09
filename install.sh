@@ -176,13 +176,13 @@ MAX_RETRIES=3
 RETRY_COUNT=0
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if npm install 2>&1 | tee -a "$LOG_FILE"; then
+    if npm install --legacy-peer-deps 2>&1 | tee -a "$LOG_FILE"; then
         log_success "✓ npm dependencies installed successfully"
         break
     else
         RETRY_COUNT=$((RETRY_COUNT + 1))
         if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-            log_warning "npm install attempt $RETRY_COUNT failed, retrying..."
+            log_warning "npm install attempt $RETRY_COUNT failed, retrying in 5 seconds..."
             sleep 5
         else
             log_error "npm install failed after $MAX_RETRIES attempts"
