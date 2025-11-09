@@ -45,7 +45,7 @@ export default function QRPayment() {
 
     try {
       const token = localStorage.getItem('token')
-      const response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/qr-payment`, { qr_data: qrValue }, {
+      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/qr-payment`, { qr_data: qrValue }, {
         headers: { Authorization: `Bearer ${token}` }
       })
 
