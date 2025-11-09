@@ -137,41 +137,60 @@ if ! command -v npm &> /dev/null; then
 fi
 
 # Clean install - remove old files and cache
-log_debug "Cleaning previous installations..."
-rm -rf node_modules package-lock.json 2>&1 | tee -a "$LOG_FILE" || log_warning "Could not clean old files"
+log_info "🧹 Cleaning previous installations..."
+log_debug "Removing node_modules and package-lock.json..."
+rm -rf node_modules package-lock.json .next 2>&1 >> "$LOG_FILE" || log_warning "Could not clean old files"
 
 log_debug "Cleaning npm cache..."
-npm cache clean --force 2>&1 | tee -a "$LOG_FILE" || log_warning "npm cache clean had issues"
+npm cache clean --force 2>&1 >> "$LOG_FILE" || log_warning "npm cache clean had issues"
 
 # Install with legacy peer deps
-log_debug "Installing npm dependencies (this may take 2-3 minutes)..."
-if npm install --legacy-peer-deps 2>&1 | tee -a "$LOG_FILE"; then
-    log_success "npm dependencies installed successfully"
-else
-    log_error "Failed to install npm dependencies"
-    log_info "Attempting npm install again with verbose output..."
-    if npm install --legacy-peer-deps --verbose 2>&1 | tee -a "$LOG_FILE"; then
-        log_success "npm dependencies installed on retry"
+log_info "📥 Installing npm dependencies (this may take 2-3 minutes)..."
+MAX_RETRIES=3
+RETRY_COUNT=0
+
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    if npm install --legacy-peer-deps 2>&1 | tee -a "$LOG_FILE"; then
+        log_success "✓ npm dependencies installed successfully"
+        break
     else
-        log_error "npm install failed on retry - cannot proceed"
-        exit 1
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            log_warning "npm install attempt $RETRY_COUNT failed, retrying..."
+            sleep 5
+        else
+            log_error "npm install failed after $MAX_RETRIES attempts"
+            exit 1
+        fi
     fi
-fi
+done
 
 # Verify node_modules exists and has required packages
+log_info "🔍 Verifying frontend dependencies..."
+
+if [ ! -d "node_modules" ]; then
+    log_error "node_modules directory not found after npm install"
+    exit 1
+fi
+
 if [ ! -d "node_modules/next" ]; then
-    log_error "Next.js not found in node_modules after install"
-    log_info "Debugging: listing node_modules contents..."
-    ls -la node_modules 2>&1 | tee -a "$LOG_FILE" || true
+    log_error "❌ Next.js not found in node_modules"
+    log_info "Available packages in node_modules:"
+    ls -1 node_modules 2>&1 | head -20 | tee -a "$LOG_FILE"
     exit 1
 fi
 
 if [ ! -d "node_modules/react" ]; then
-    log_error "React not found in node_modules after install"
+    log_error "❌ React not found in node_modules"
     exit 1
 fi
 
-log_success "Frontend dependencies verified (next.js and react found)"
+if [ ! -f "node_modules/next/package.json" ]; then
+    log_error "❌ Next.js package.json not found - installation may be corrupted"
+    exit 1
+fi
+
+log_success "✓ Frontend dependencies verified (next.js, react, and types found)"
 
 # Build frontend with DOMAIN environment variable
 log_info "Building Next.js frontend (this may take 1-2 minutes)..."
