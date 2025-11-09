@@ -217,7 +217,7 @@ if [ ! -d "node_modules" ]; then
     exit 1
 fi
 
-for pkg in next react react-dom axios; do
+for pkg in next react react-dom axios @tailwindcss/postcss; do
     if [ ! -d "node_modules/$pkg" ]; then
         log_error "❌ $pkg not found in node_modules"
         log_info "Available packages: $(ls -1 node_modules 2>&1 | head -10)"
@@ -225,7 +225,7 @@ for pkg in next react react-dom axios; do
     fi
 done
 
-log_success "✓ All required packages verified: next, react, react-dom, axios"
+log_success "✓ All required packages verified: next, react, react-dom, axios, @tailwindcss/postcss"
 
 # Generate Next.js TypeScript environment file
 log_info "📝 Generating Next.js TypeScript environment..."
