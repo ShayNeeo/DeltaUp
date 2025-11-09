@@ -20,7 +20,6 @@ export default function QRPayment() {
 
     setLoading(true)
     try {
-      const token = localStorage.getItem('token')
       const user = JSON.parse(localStorage.getItem('user') || '{}')
       
       const qrData = {
