@@ -153,12 +153,13 @@ rm -rf .next node_modules package-lock.json 2>&1 >> "$LOG_FILE" || log_warning "
 
 # Verify postcss.config.js has correct Tailwind v4 configuration
 log_info "🔍 Verifying PostCSS configuration for Tailwind v4..."
-if ! grep -q "@tailwindcss/postcss" postcss.config.js 2>/dev/null; then
-    log_warning "PostCSS config missing @tailwindcss/postcss - creating correct config"
+if ! grep -q "tailwindcss:" postcss.config.js 2>/dev/null; then
+    log_warning "PostCSS config missing tailwindcss - creating correct config"
     cat > postcss.config.js << 'EOF'
 module.exports = {
   plugins: {
-    '@tailwindcss/postcss': {},
+    tailwindcss: {},
+    autoprefixer: {},
   },
 }
 EOF
@@ -191,12 +192,12 @@ if NODE_ENV=production NEXT_PUBLIC_API_URL=https://$DOMAIN npm install --legacy-
     log_success "✓ Dependencies installed successfully"
     
     # Verify Tailwind v4 packages are installed
-    if [ ! -d "node_modules/@tailwindcss/postcss" ]; then
-        log_error "❌ @tailwindcss/postcss not found - required for Tailwind v4"
-        exit 1
-    fi
     if [ ! -d "node_modules/tailwindcss" ]; then
         log_error "❌ tailwindcss not found"
+        exit 1
+    fi
+    if [ ! -d "node_modules/postcss" ]; then
+        log_error "❌ postcss not found"
         exit 1
     fi
     log_success "✓ Tailwind v4 packages verified"
