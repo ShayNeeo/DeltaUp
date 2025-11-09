@@ -3,13 +3,22 @@ const nextConfig = {
   reactStrictMode: true,
   productionBrowserSourceMaps: false,
   env: {
-    API_URL: process.env.API_URL || 'http://localhost:8000',
+    // Use https for production, http for development
+    API_URL: process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? 'https://localhost:443' : 'http://localhost:8000'),
   },
   serverRuntimeConfig: {
-    apiUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+    // Server-side config - supports both http and https
+    apiUrl: process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? 'https://localhost:443' : 'http://localhost:8000'),
   },
   publicRuntimeConfig: {
-    apiUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+    // Public config - accessible in browser
+    apiUrl: process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? 'https://localhost:443' : 'http://localhost:8000'),
+  },
+  // Enable compression
+  compress: true,
+  // Configure image optimization
+  images: {
+    unoptimized: true, // Disable for Now.js deployments
   },
 }
 

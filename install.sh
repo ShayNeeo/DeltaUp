@@ -157,30 +157,61 @@ fi
 log_info "🔒 Setting up SSL Certificate with Let's Encrypt..."
 CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
 if [ ! -d "$CERT_DIR" ]; then
-    log_info "Generating new certificate for $DOMAIN (www subdomain excluded)..."
-    if sudo certbot certonly --standalone \
+    log_info "Generating new certificate for $DOMAIN (www subdomain included)..."
+    # Use webroot method with nginx - this doesn't require stopping the server
+    if sudo certbot certonly --webroot \
+        --webroot-path=/var/www/certbot \
         --non-interactive \
         --agree-tos \
         --email $EMAIL \
         -d $DOMAIN \
+        -d www.$DOMAIN \
         --preferred-challenges http 2>&1 | tee -a "$LOG_FILE"; then
-        log_success "SSL certificate generated successfully!"
+        log_success "SSL certificate generated successfully for $DOMAIN and www.$DOMAIN!"
     else
-        log_warning "Failed to generate SSL certificate with Let's Encrypt (DNS may not be configured)"
-        log_info "Generating self-signed certificate for development/testing..."
-        sudo mkdir -p "$CERT_DIR"
-        if sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-            -keyout "$CERT_DIR/privkey.pem" \
-            -out "$CERT_DIR/fullchain.pem" \
-            -subj "/C=US/ST=State/L=City/O=Organization/CN=$DOMAIN" 2>&1 | tee -a "$LOG_FILE"; then
-            log_success "Self-signed certificate generated for development"
+        log_warning "Failed to generate SSL certificate with Let's Encrypt (checking DNS configuration)"
+        log_info "Trying with standalone mode (temporary Nginx stop)..."
+        
+        # Stop nginx temporarily for standalone verification
+        if sudo systemctl stop nginx 2>&1 | tee -a "$LOG_FILE"; then
+            log_debug "Nginx stopped for certificate generation"
+            
+            if sudo certbot certonly --standalone \
+                --non-interactive \
+                --agree-tos \
+                --email $EMAIL \
+                -d $DOMAIN \
+                -d www.$DOMAIN \
+                --preferred-challenges http 2>&1 | tee -a "$LOG_FILE"; then
+                log_success "SSL certificate generated successfully with standalone method!"
+            else
+                log_warning "Failed to generate SSL certificate with Let's Encrypt - using self-signed certificate"
+                log_info "Generating self-signed certificate for development/testing..."
+                sudo mkdir -p "$CERT_DIR"
+                if sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+                    -keyout "$CERT_DIR/privkey.pem" \
+                    -out "$CERT_DIR/fullchain.pem" \
+                    -subj "/C=US/ST=State/L=City/O=Organization/CN=$DOMAIN" 2>&1 | tee -a "$LOG_FILE"; then
+                    log_success "Self-signed certificate generated for development"
+                else
+                    log_error "Failed to generate self-signed certificate"
+                    exit 1
+                fi
+            fi
         else
-            log_error "Failed to generate self-signed certificate"
+            log_error "Failed to stop Nginx for certificate generation"
             exit 1
         fi
     fi
 else
     log_success "SSL certificate already exists at $CERT_DIR"
+fi
+
+# Ensure certbot renewal directory exists
+if [ ! -d "/var/www/certbot" ]; then
+    log_debug "Creating certbot webroot directory"
+    sudo mkdir -p /var/www/certbot
+    sudo chmod 755 /var/www/certbot
 fi
 
 # Setup Nginx configuration
@@ -194,16 +225,19 @@ upstream deltaup_frontend {
     server 127.0.0.1:3000;
 }
 
-# HTTP to HTTPS redirect
+# HTTP to HTTPS redirect with Let's Encrypt renewal support
 server {
     listen 80;
     listen [::]:80;
     server_name $DOMAIN www.$DOMAIN;
     
+    # Let's Encrypt ACME challenge location (required for webroot renewal)
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
+        try_files \$uri =404;
     }
     
+    # Redirect all other HTTP traffic to HTTPS
     location / {
         return 301 https://\$server_name\$request_uri;
     }
@@ -347,7 +381,7 @@ After=network.target deltaup-backend.service
 
 [Service]
 Type=simple
-User=$USER
+User=root
 WorkingDirectory=$PROJECT_DIR/frontend
 Environment="NODE_ENV=production"
 Environment="NEXT_PUBLIC_API_URL=https://$DOMAIN"
@@ -375,10 +409,15 @@ fi
 # Setup auto-renewal for SSL certificates
 log_info "⚙️ Setting up automatic SSL certificate renewal..."
 if sudo tee /etc/cron.d/certbot-renew > /dev/null <<EOF
-0 2 1 * * root certbot renew --quiet && systemctl reload nginx
+# Auto-renew Let's Encrypt certificates using webroot method
+# Runs daily at 2:30 AM to avoid peak traffic times
+30 2 * * * root certbot renew --webroot --webroot-path=/var/www/certbot --quiet && systemctl reload nginx
+
+# Additional renewal attempt at 14:30 (2:30 PM) in case of failures
+30 14 * * * root certbot renew --webroot --webroot-path=/var/www/certbot --quiet -q 2>/dev/null || true
 EOF
 then
-    log_success "SSL auto-renewal cron job configured"
+    log_success "SSL auto-renewal cron jobs configured"
 else
     log_error "Failed to configure SSL auto-renewal"
     exit 1
