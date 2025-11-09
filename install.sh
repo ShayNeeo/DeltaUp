@@ -324,6 +324,14 @@ server {
         proxy_redirect off;
     }
 
+    # Serve Next.js static files directly
+    location /_next/static/ {
+        alias $PROJECT_DIR/frontend/.next/static/;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
     # Frontend
     location / {
         proxy_pass http://deltaup_frontend;
