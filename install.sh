@@ -209,17 +209,34 @@ server {
     }
 }
 
-# HTTPS configuration
+# HTTPS/HTTP2/HTTP3 configuration
 server {
+    # HTTPS with HTTP/2
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
+    
+    # HTTP/3 with QUIC
+    listen 443 quic reuseport;
+    listen [::]:443 quic reuseport;
+    
     server_name $DOMAIN www.$DOMAIN;
 
+    # TLS Configuration
     ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
+    
+    # TLS 1.3 only (maximum security)
+    ssl_protocols TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
     ssl_prefer_server_ciphers on;
+    
+    # HTTP/3 QUIC support
+    add_header Alt-Svc 'h3=":443"; ma=2592000' always;
+    
+    # Security headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
 
     client_max_body_size 50M;
 
@@ -251,6 +268,11 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_redirect off;
+        
+        # WebSocket support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
     }
 }
 EOF
