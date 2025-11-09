@@ -147,25 +147,9 @@ if ! command -v npm &> /dev/null; then
     exit 1
 fi
 
-# Install dependencies (always run to ensure Tailwind v4 is properly configured)
-log_info "📥 Installing npm dependencies..."
-if npm install --legacy-peer-deps 2>&1 | tee -a "$LOG_FILE"; then
-    log_success "✓ npm dependencies installed successfully"
-    
-    # Verify Tailwind v4 packages are installed
-    if [ ! -d "node_modules/@tailwindcss/postcss" ]; then
-        log_error "❌ @tailwindcss/postcss not found - required for Tailwind v4"
-        exit 1
-    fi
-    if [ ! -d "node_modules/tailwindcss" ]; then
-        log_error "❌ tailwindcss not found"
-        exit 1
-    fi
-    log_success "✓ Tailwind v4 packages verified"
-else
-    log_error "npm install failed"
-    exit 1
-fi
+# Clean build to ensure fresh CSS generation
+log_info "🧹 Cleaning frontend build cache..."
+rm -rf .next node_modules package-lock.json 2>&1 >> "$LOG_FILE" || log_warning "Could not clean some files"
 
 # Verify postcss.config.js has correct Tailwind v4 configuration
 log_info "🔍 Verifying PostCSS configuration for Tailwind v4..."
@@ -201,8 +185,29 @@ else
     log_debug "next-env.d.ts already exists"
 fi
 
-# Build frontend (always rebuild - it's fast with incremental builds)
+# Install dependencies with correct environment for Tailwind v4
+log_info "📥 Installing npm dependencies..."
+if NODE_ENV=production NEXT_PUBLIC_API_URL=https://$DOMAIN npm install --legacy-peer-deps 2>&1 | tee -a "$LOG_FILE"; then
+    log_success "✓ Dependencies installed successfully"
+    
+    # Verify Tailwind v4 packages are installed
+    if [ ! -d "node_modules/@tailwindcss/postcss" ]; then
+        log_error "❌ @tailwindcss/postcss not found - required for Tailwind v4"
+        exit 1
+    fi
+    if [ ! -d "node_modules/tailwindcss" ]; then
+        log_error "❌ tailwindcss not found"
+        exit 1
+    fi
+    log_success "✓ Tailwind v4 packages verified"
+else
+    log_error "npm install failed"
+    exit 1
+fi
+
+# Build frontend
 log_info "Building Next.js frontend..."
+
 if NODE_ENV=production NEXT_PUBLIC_API_URL=https://$DOMAIN npm run build 2>&1 | tee -a "$LOG_FILE"; then
     log_success "✓ Next.js frontend build completed successfully"
     
