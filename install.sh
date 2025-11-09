@@ -109,10 +109,11 @@ if ! command -v node &> /dev/null; then
         exit 1
     fi
 else
-    CURRENT_NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
+    CURRENT_NODE_VERSION=$(node --version | sed 's/v//' | cut -d'.' -f1)
+    CURRENT_NODE_VERSION=$((CURRENT_NODE_VERSION + 0))
     log_info "Node.js already installed: $(node --version)"
     
-    if [ "$CURRENT_NODE_VERSION" -lt 22 ]; then
+    if [ "$CURRENT_NODE_VERSION" -lt 18 ]; then
         log_warning "⚠️ Node.js v$CURRENT_NODE_VERSION detected - upgrading to v22..."
         if curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - 2>&1 | tee -a "$LOG_FILE"; then
             log_debug "Node.js v22 repository added"
@@ -130,6 +131,14 @@ else
     else
         log_success "Node.js v$CURRENT_NODE_VERSION meets requirements"
     fi
+fi
+
+# Update npm to latest after Node.js setup
+log_info "Updating npm to latest version..."
+if sudo npm install -g npm@latest 2>&1 | tee -a "$LOG_FILE"; then
+    log_success "npm updated to: $(npm --version)"
+else
+    log_warning "npm update had issues, continuing anyway"
 fi
 
 # Check if Rust is installed
@@ -161,16 +170,13 @@ log_info "🧹 Cleaning previous installations..."
 log_debug "Removing node_modules and package-lock.json..."
 rm -rf node_modules package-lock.json .next 2>&1 >> "$LOG_FILE" || log_warning "Could not clean old files"
 
-log_debug "Cleaning npm cache..."
-npm cache clean --force 2>&1 >> "$LOG_FILE" || log_warning "npm cache clean had issues"
-
-# Install with legacy peer deps
+# Install dependencies
 log_info "📥 Installing npm dependencies (this may take 2-3 minutes)..."
 MAX_RETRIES=3
 RETRY_COUNT=0
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if npm install --legacy-peer-deps 2>&1 | tee -a "$LOG_FILE"; then
+    if npm install 2>&1 | tee -a "$LOG_FILE"; then
         log_success "✓ npm dependencies installed successfully"
         break
     else
@@ -224,8 +230,24 @@ fi
 # Backend setup
 log_info "🦀 Setting up Rust Backend..."
 cd "$PROJECT_DIR/backend"
+
+# Source cargo environment
+if [ -f "$HOME/.cargo/env" ]; then
+    source "$HOME/.cargo/env" 2>&1 >> "$LOG_FILE" || log_warning "Could not source cargo env"
+fi
+
 if cargo build --release 2>&1 | tee -a "$LOG_FILE"; then
     log_success "Rust backend build completed"
+    BACKEND_BINARY="$PROJECT_DIR/backend/target/release/deltaup"
+    if [ ! -f "$BACKEND_BINARY" ]; then
+        # Try alternate binary names
+        BACKEND_BINARY=$(find "$PROJECT_DIR/backend/target/release" -type f -executable | head -1)
+        if [ -z "$BACKEND_BINARY" ]; then
+            log_error "Backend binary not found after build"
+            exit 1
+        fi
+    fi
+    log_debug "Backend binary: $BACKEND_BINARY"
 else
     log_error "Backend build failed"
     exit 1
@@ -337,8 +359,8 @@ server {
     ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
     
-    # TLS 1.3 only (maximum security)
-    ssl_protocols TLSv1.3;
+    # TLS 1.2 and 1.3 (wider compatibility)
+    ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
     ssl_prefer_server_ciphers on;
     
@@ -424,6 +446,7 @@ log_info "📋 Setting up systemd services..."
 
 # Backend service
 log_debug "Creating backend systemd service"
+BACKEND_USER=$(whoami)
 if sudo tee /etc/systemd/system/deltaup-backend.service > /dev/null <<EOF
 [Unit]
 Description=DeltaUp Backend Service
@@ -431,14 +454,16 @@ After=network.target
 
 [Service]
 Type=simple
-User=$USER
+User=$BACKEND_USER
 WorkingDirectory=$PROJECT_DIR/backend
 Environment="DATABASE_URL=sqlite://$PROJECT_DIR/backend/fintech.db"
 Environment="JWT_SECRET=$(openssl rand -base64 32)"
 Environment="RUST_LOG=info"
-ExecStart=$HOME/.cargo/bin/cargo run --release
+ExecStart=$BACKEND_BINARY
 Restart=always
 RestartSec=10
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
@@ -452,6 +477,8 @@ fi
 
 # Frontend service
 log_debug "Creating frontend systemd service"
+FRONTEND_USER=$(whoami)
+NEXT_BIN="$PROJECT_DIR/frontend/node_modules/.bin/next"
 if sudo tee /etc/systemd/system/deltaup-frontend.service > /dev/null <<EOF
 [Unit]
 Description=DeltaUp Frontend Service
@@ -459,13 +486,15 @@ After=network.target deltaup-backend.service
 
 [Service]
 Type=simple
-User=root
+User=$FRONTEND_USER
 WorkingDirectory=$PROJECT_DIR/frontend
 Environment="NODE_ENV=production"
 Environment="NEXT_PUBLIC_API_URL=https://$DOMAIN"
-ExecStart=/usr/bin/npx next start -p 3000
+ExecStart=$NEXT_BIN start -p 3000
 Restart=always
 RestartSec=10
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
