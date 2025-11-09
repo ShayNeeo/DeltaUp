@@ -329,7 +329,7 @@ User=$USER
 WorkingDirectory=$PROJECT_DIR/frontend
 Environment="NODE_ENV=production"
 Environment="NEXT_PUBLIC_API_URL=https://$DOMAIN"
-ExecStart=/usr/bin/node $PROJECT_DIR/frontend/.next/standalone/server.js
+ExecStart=/usr/bin/npx next start -p 3000
 Restart=always
 RestartSec=10
 
