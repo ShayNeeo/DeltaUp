@@ -147,9 +147,9 @@ if ! command -v npm &> /dev/null; then
     exit 1
 fi
 
-# Install dependencies (skip if already installed)
-if [ -d "node_modules" ] && [ -d "node_modules/next" ]; then
-    log_info "📦 Skipping npm install - dependencies already exist"
+# Install dependencies (skip if up to date)
+if [ -d "node_modules" ] && [ -d "node_modules/next" ] && [ "package.json" -ot "node_modules" ]; then
+    log_info "📦 Skipping npm install - dependencies are up to date"
 else
     log_info "📥 Installing npm dependencies..."
     if npm install --legacy-peer-deps 2>&1 | tee -a "$LOG_FILE"; then
@@ -178,9 +178,9 @@ else
     log_debug "next-env.d.ts already exists"
 fi
 
-# Build frontend (skip if already built)
-if [ -d ".next" ]; then
-    log_info "🏗️  Skipping frontend build - already built"
+# Build frontend (skip if up to date)
+if [ -d ".next" ] && [ "package.json" -ot ".next" ] && find pages components -name "*.tsx" -o -name "*.ts" -o -name "*.js" | xargs -r ls -t | head -1 | xargs -I {} test {} -ot ".next"; then
+    log_info "🏗️  Skipping frontend build - already up to date"
 else
     log_info "Building Next.js frontend (this may take 1-2 minutes)..."
     if NODE_ENV=production DOMAIN=$DOMAIN npm run build 2>&1 | tee -a "$LOG_FILE"; then
@@ -200,10 +200,10 @@ if [ -f "$HOME/.cargo/env" ]; then
     source "$HOME/.cargo/env" 2>&1 >> "$LOG_FILE" || log_warning "Could not source cargo env"
 fi
 
-# Build backend (skip if already built)
+# Build backend (skip if up to date)
 BACKEND_BINARY="$PROJECT_DIR/backend/target/release/deltaup"
-if [ -f "$BACKEND_BINARY" ]; then
-    log_info "⚙️  Skipping backend build - already built"
+if [ -f "$BACKEND_BINARY" ] && [ "Cargo.toml" -ot "$BACKEND_BINARY" ] && find src -name "*.rs" | xargs -r ls -t | head -1 | xargs -I {} test {} -ot "$BACKEND_BINARY"; then
+    log_info "⚙️  Skipping backend build - already up to date"
 else
     log_info "Building Rust backend..."
     if cargo build --release 2>&1 | tee -a "$LOG_FILE"; then
