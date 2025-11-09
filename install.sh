@@ -147,17 +147,40 @@ if ! command -v npm &> /dev/null; then
     exit 1
 fi
 
-# Install dependencies (skip if up to date)
-if [ -d "node_modules" ] && [ -d "node_modules/next" ] && [ "package.json" -ot "node_modules" ]; then
-    log_info "📦 Skipping npm install - dependencies are up to date"
-else
-    log_info "📥 Installing npm dependencies..."
-    if npm install --legacy-peer-deps 2>&1 | tee -a "$LOG_FILE"; then
-        log_success "✓ npm dependencies installed successfully"
-    else
-        log_error "npm install failed"
+# Install dependencies (always run to ensure Tailwind v4 is properly configured)
+log_info "📥 Installing npm dependencies..."
+if npm install --legacy-peer-deps 2>&1 | tee -a "$LOG_FILE"; then
+    log_success "✓ npm dependencies installed successfully"
+    
+    # Verify Tailwind v4 packages are installed
+    if [ ! -d "node_modules/@tailwindcss/postcss" ]; then
+        log_error "❌ @tailwindcss/postcss not found - required for Tailwind v4"
         exit 1
     fi
+    if [ ! -d "node_modules/tailwindcss" ]; then
+        log_error "❌ tailwindcss not found"
+        exit 1
+    fi
+    log_success "✓ Tailwind v4 packages verified"
+else
+    log_error "npm install failed"
+    exit 1
+fi
+
+# Verify postcss.config.js has correct Tailwind v4 configuration
+log_info "🔍 Verifying PostCSS configuration for Tailwind v4..."
+if ! grep -q "@tailwindcss/postcss" postcss.config.js 2>/dev/null; then
+    log_warning "PostCSS config missing @tailwindcss/postcss - creating correct config"
+    cat > postcss.config.js << 'EOF'
+module.exports = {
+  plugins: {
+    '@tailwindcss/postcss': {},
+  },
+}
+EOF
+    log_success "✓ PostCSS config updated for Tailwind v4"
+else
+    log_debug "PostCSS config verified"
 fi
 
 # Generate Next.js TypeScript environment file
