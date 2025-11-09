@@ -41,21 +41,11 @@ log_warning() {
 log_debug() {
     local msg="$1"
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    if [ "$DEBUG_MODE" == "true" ]; then
-        echo "[DEBUG] $timestamp - $msg" | tee -a "$LOG_FILE"
-    else
-        echo "[DEBUG] $timestamp - $msg" >> "$LOG_FILE"
-    fi
+    echo "[DEBUG] $timestamp - $msg" >> "$LOG_FILE"
 }
 
 # Trap errors and log them
 trap 'log_error "Installation failed at line $LINENO"; exit 1' ERR
-
-# Load environment variables
-if [ -f .env.production ]; then
-    log_debug "Loading .env.production"
-    export $(cat .env.production | grep -v '^#' | xargs)
-fi
 
 # Check required environment variables
 if [ -z "$DOMAIN" ]; then
@@ -85,7 +75,7 @@ else
     log_warning "apt-get update encountered issues"
 fi
 
-if sudo apt-get install -y -qq curl wget git nginx certbot python3-certbot-nginx build-essential pkg-config libssl-dev 2>&1 | tee -a "$LOG_FILE"; then
+if sudo apt-get install -y -qq curl git nginx certbot python3-certbot-nginx build-essential pkg-config libssl-dev 2>&1 | tee -a "$LOG_FILE"; then
     log_success "System packages installed"
 else
     log_error "Failed to install system packages"
@@ -133,14 +123,6 @@ else
     fi
 fi
 
-# Update npm to latest after Node.js setup
-log_info "Updating npm to latest version..."
-if sudo npm install -g npm@latest 2>&1 | tee -a "$LOG_FILE"; then
-    log_success "npm updated to: $(npm --version)"
-else
-    log_warning "npm update had issues, continuing anyway"
-fi
-
 # Check if Rust is installed
 if ! command -v cargo &> /dev/null; then
     log_info "📦 Installing Rust..."
@@ -165,67 +147,18 @@ if ! command -v npm &> /dev/null; then
     exit 1
 fi
 
-# Clean install - remove old files and cache
-log_info "🧹 Cleaning previous installations..."
-log_debug "Removing node_modules, package-lock.json, and npm cache..."
-rm -rf node_modules package-lock.json .next 2>&1 >> "$LOG_FILE" || log_warning "Could not clean old files"
-npm cache clean --force 2>&1 >> "$LOG_FILE" || log_warning "npm cache clean had issues"
-rm -rf ~/.npm 2>&1 >> "$LOG_FILE" || log_warning "Could not remove npm cache directory"
-
-# Install dependencies
-log_info "📥 Installing npm dependencies (this may take 2-3 minutes)..."
-MAX_RETRIES=3
-RETRY_COUNT=0
-
-while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    RETRY_COUNT=$((RETRY_COUNT + 1))
-    log_info "npm install attempt $RETRY_COUNT/$MAX_RETRIES..."
-    
-    if npm install --legacy-peer-deps --no-audit --no-fund 2>&1 | tee -a "$LOG_FILE"; then
-        # Check if next was actually installed
-        if [ -d "node_modules/next" ]; then
-            log_success "✓ npm dependencies installed successfully"
-            break
-        else
-            log_warning "npm install reported success but next not found in node_modules"
-            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-                log_info "Retrying in 10 seconds..."
-                sleep 10
-            fi
-        fi
+# Install dependencies (skip if already installed)
+if [ -d "node_modules" ] && [ -d "node_modules/next" ]; then
+    log_info "📦 Skipping npm install - dependencies already exist"
+else
+    log_info "📥 Installing npm dependencies..."
+    if npm install --legacy-peer-deps 2>&1 | tee -a "$LOG_FILE"; then
+        log_success "✓ npm dependencies installed successfully"
     else
-        log_warning "npm install reported failure"
-        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-            log_info "Retrying in 10 seconds..."
-            sleep 10
-        fi
-    fi
-done
-
-if [ ! -d "node_modules/next" ]; then
-    log_error "npm install failed - next package not found in node_modules after $MAX_RETRIES attempts"
-    log_info "Checking npm version: $(npm --version)"
-    log_info "Checking node version: $(node --version)"
-    exit 1
-fi
-
-# Verify node_modules exists and has required packages
-log_info "🔍 Verifying frontend dependencies..."
-
-if [ ! -d "node_modules" ]; then
-    log_error "node_modules directory not found"
-    exit 1
-fi
-
-for pkg in next react react-dom axios @tailwindcss/postcss; do
-    if [ ! -d "node_modules/$pkg" ]; then
-        log_error "❌ $pkg not found in node_modules"
-        log_info "Available packages: $(ls -1 node_modules 2>&1 | head -10)"
+        log_error "npm install failed"
         exit 1
     fi
-done
-
-log_success "✓ All required packages verified: next, react, react-dom, axios, @tailwindcss/postcss"
+fi
 
 # Generate Next.js TypeScript environment file
 log_info "📝 Generating Next.js TypeScript environment..."
@@ -245,21 +178,17 @@ else
     log_debug "next-env.d.ts already exists"
 fi
 
-# Initialize Next.js types by running TypeScript check once
-log_debug "Running initial TypeScript compilation to generate types..."
-if npx tsc --noEmit --skipLibCheck 2>&1 >> "$LOG_FILE" || true; then
-    log_debug "TypeScript initialization completed"
+# Build frontend (skip if already built)
+if [ -d ".next" ]; then
+    log_info "🏗️  Skipping frontend build - already built"
 else
-    log_warning "TypeScript initialization had issues"
-fi
-
-# Build frontend with proper environment variables
-log_info "Building Next.js frontend (this may take 1-2 minutes)..."
-if NODE_ENV=production DOMAIN=$DOMAIN npm run build 2>&1 | tee -a "$LOG_FILE"; then
-    log_success "✓ Next.js frontend build completed successfully"
-else
-    log_error "Frontend build failed - check logs for TypeScript errors"
-    exit 1
+    log_info "Building Next.js frontend (this may take 1-2 minutes)..."
+    if NODE_ENV=production DOMAIN=$DOMAIN npm run build 2>&1 | tee -a "$LOG_FILE"; then
+        log_success "✓ Next.js frontend build completed successfully"
+    else
+        log_error "Frontend build failed - check logs for TypeScript errors"
+        exit 1
+    fi
 fi
 
 # Backend setup
@@ -271,29 +200,34 @@ if [ -f "$HOME/.cargo/env" ]; then
     source "$HOME/.cargo/env" 2>&1 >> "$LOG_FILE" || log_warning "Could not source cargo env"
 fi
 
-if cargo build --release 2>&1 | tee -a "$LOG_FILE"; then
-    log_success "Rust backend build completed"
-    BACKEND_BINARY="$PROJECT_DIR/backend/target/release/deltaup"
-    if [ ! -f "$BACKEND_BINARY" ]; then
-        # Try alternate binary names
-        BACKEND_BINARY=$(find "$PROJECT_DIR/backend/target/release" -type f -executable | head -1)
-        if [ -z "$BACKEND_BINARY" ]; then
-            log_error "Backend binary not found after build"
-            exit 1
-        fi
-    fi
-    log_debug "Backend binary: $BACKEND_BINARY"
+# Build backend (skip if already built)
+BACKEND_BINARY="$PROJECT_DIR/backend/target/release/deltaup"
+if [ -f "$BACKEND_BINARY" ]; then
+    log_info "⚙️  Skipping backend build - already built"
 else
-    log_error "Backend build failed"
-    exit 1
+    log_info "Building Rust backend..."
+    if cargo build --release 2>&1 | tee -a "$LOG_FILE"; then
+        log_success "Rust backend build completed"
+        if [ ! -f "$BACKEND_BINARY" ]; then
+            # Try alternate binary names
+            BACKEND_BINARY=$(find "$PROJECT_DIR/backend/target/release" -type f -executable | head -1)
+            if [ -z "$BACKEND_BINARY" ]; then
+                log_error "Backend binary not found after build"
+                exit 1
+            fi
+        fi
+        log_debug "Backend binary: $BACKEND_BINARY"
+    else
+        log_error "Backend build failed"
+        exit 1
+    fi
 fi
 
 # Create SSL certificates with Let's Encrypt
 log_info "🔒 Setting up SSL Certificate with Let's Encrypt..."
 CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
 if [ ! -d "$CERT_DIR" ]; then
-    log_info "Generating new certificate for $DOMAIN (www subdomain included)..."
-    # Use webroot method with nginx - this doesn't require stopping the server
+    log_info "Generating SSL certificate for $DOMAIN..."
     if sudo certbot certonly --webroot \
         --webroot-path=/var/www/certbot \
         --non-interactive \
@@ -302,44 +236,13 @@ if [ ! -d "$CERT_DIR" ]; then
         -d $DOMAIN \
         -d www.$DOMAIN \
         --preferred-challenges http 2>&1 | tee -a "$LOG_FILE"; then
-        log_success "SSL certificate generated successfully for $DOMAIN and www.$DOMAIN!"
+        log_success "SSL certificate generated successfully!"
     else
-        log_warning "Failed to generate SSL certificate with Let's Encrypt (checking DNS configuration)"
-        log_info "Trying with standalone mode (temporary Nginx stop)..."
-        
-        # Stop nginx temporarily for standalone verification
-        if sudo systemctl stop nginx 2>&1 | tee -a "$LOG_FILE"; then
-            log_debug "Nginx stopped for certificate generation"
-            
-            if sudo certbot certonly --standalone \
-                --non-interactive \
-                --agree-tos \
-                --email $EMAIL \
-                -d $DOMAIN \
-                -d www.$DOMAIN \
-                --preferred-challenges http 2>&1 | tee -a "$LOG_FILE"; then
-                log_success "SSL certificate generated successfully with standalone method!"
-            else
-                log_warning "Failed to generate SSL certificate with Let's Encrypt - using self-signed certificate"
-                log_info "Generating self-signed certificate for development/testing..."
-                sudo mkdir -p "$CERT_DIR"
-                if sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-                    -keyout "$CERT_DIR/privkey.pem" \
-                    -out "$CERT_DIR/fullchain.pem" \
-                    -subj "/C=US/ST=State/L=City/O=Organization/CN=$DOMAIN" 2>&1 | tee -a "$LOG_FILE"; then
-                    log_success "Self-signed certificate generated for development"
-                else
-                    log_error "Failed to generate self-signed certificate"
-                    exit 1
-                fi
-            fi
-        else
-            log_error "Failed to stop Nginx for certificate generation"
-            exit 1
-        fi
+        log_error "Failed to generate SSL certificate"
+        exit 1
     fi
 else
-    log_success "SSL certificate already exists at $CERT_DIR"
+    log_success "SSL certificate already exists"
 fi
 
 # Ensure certbot renewal directory exists
@@ -476,13 +379,16 @@ else
     fi
 fi
 
-# Create systemd services for frontend and backend
-log_info "📋 Setting up systemd services..."
+# Create systemd services for frontend and backend (skip if already exist)
+if [ -f "/etc/systemd/system/deltaup-backend.service" ] && [ -f "/etc/systemd/system/deltaup-frontend.service" ]; then
+    log_info "📋 Skipping systemd services - already configured"
+else
+    log_info "📋 Setting up systemd services..."
 
-# Backend service
-log_debug "Creating backend systemd service"
-BACKEND_USER=$(whoami)
-if sudo tee /etc/systemd/system/deltaup-backend.service > /dev/null <<EOF
+    # Backend service
+    log_debug "Creating backend systemd service"
+    BACKEND_USER=$(whoami)
+    if sudo tee /etc/systemd/system/deltaup-backend.service > /dev/null <<EOF
 [Unit]
 Description=DeltaUp Backend Service
 After=network.target
@@ -503,18 +409,18 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 EOF
-then
-    log_success "Backend service created"
-else
-    log_error "Failed to create backend service"
-    exit 1
-fi
+    then
+        log_success "Backend service created"
+    else
+        log_error "Failed to create backend service"
+        exit 1
+    fi
 
-# Frontend service
-log_debug "Creating frontend systemd service"
-FRONTEND_USER=$(whoami)
-NEXT_BIN="$PROJECT_DIR/frontend/node_modules/.bin/next"
-if sudo tee /etc/systemd/system/deltaup-frontend.service > /dev/null <<EOF
+    # Frontend service
+    log_debug "Creating frontend systemd service"
+    FRONTEND_USER=$(whoami)
+    NEXT_BIN="$PROJECT_DIR/frontend/node_modules/.bin/next"
+    if sudo tee /etc/systemd/system/deltaup-frontend.service > /dev/null <<EOF
 [Unit]
 Description=DeltaUp Frontend Service
 After=network.target deltaup-backend.service
@@ -534,23 +440,27 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 EOF
-then
-    log_success "Frontend service created"
-else
-    log_error "Failed to create frontend service"
-    exit 1
+    then
+        log_success "Frontend service created"
+    else
+        log_error "Failed to create frontend service"
+        exit 1
+    fi
+
+    if sudo systemctl daemon-reload 2>&1 | tee -a "$LOG_FILE"; then
+        log_success "Systemd daemon reloaded"
+    else
+        log_error "Failed to reload systemd daemon"
+        exit 1
+    fi
 fi
 
-if sudo systemctl daemon-reload 2>&1 | tee -a "$LOG_FILE"; then
-    log_success "Systemd daemon reloaded"
+# Setup auto-renewal for SSL certificates (skip if already configured)
+if [ -f "/etc/cron.d/certbot-renew" ]; then
+    log_info "⚙️  Skipping SSL renewal setup - already configured"
 else
-    log_error "Failed to reload systemd daemon"
-    exit 1
-fi
-
-# Setup auto-renewal for SSL certificates
-log_info "⚙️ Setting up automatic SSL certificate renewal..."
-if sudo tee /etc/cron.d/certbot-renew > /dev/null <<EOF
+    log_info "⚙️ Setting up automatic SSL certificate renewal..."
+    if sudo tee /etc/cron.d/certbot-renew > /dev/null <<EOF
 # Auto-renew Let's Encrypt certificates using webroot method
 # Runs daily at 2:30 AM to avoid peak traffic times
 30 2 * * * root certbot renew --webroot --webroot-path=/var/www/certbot --quiet && systemctl reload nginx
@@ -558,11 +468,12 @@ if sudo tee /etc/cron.d/certbot-renew > /dev/null <<EOF
 # Additional renewal attempt at 14:30 (2:30 PM) in case of failures
 30 14 * * * root certbot renew --webroot --webroot-path=/var/www/certbot --quiet -q 2>/dev/null || true
 EOF
-then
-    log_success "SSL auto-renewal cron jobs configured"
-else
-    log_error "Failed to configure SSL auto-renewal"
-    exit 1
+    then
+        log_success "SSL auto-renewal cron jobs configured"
+    else
+        log_error "Failed to configure SSL auto-renewal"
+        exit 1
+    fi
 fi
 
 # Create .env.production file
@@ -583,16 +494,12 @@ fi
 echo ""
 log_success "✅ Setup complete!"
 echo ""
-echo "📊 Next steps:"
-echo "1. Start backend: sudo systemctl start deltaup-backend"
-echo "2. Start frontend: sudo systemctl start deltaup-frontend"
-echo "3. Enable on boot: sudo systemctl enable deltaup-backend deltaup-frontend"
-echo "4. Check status: sudo systemctl status deltaup-backend deltaup-frontend"
-echo ""
 echo "🌐 Your application is ready at: https://$DOMAIN"
-echo "📜 SSL Certificate: /etc/letsencrypt/live/$DOMAIN/"
-echo "📋 Full installation logs: $LOG_FILE"
-echo "⚠️  Error logs: $ERROR_LOG"
 echo ""
-echo "🔄 Auto-renewal: Certificates will auto-renew on the 1st of each month at 2 AM"
+echo "📊 Commands:"
+echo "  Start services: sudo systemctl start deltaup-backend deltaup-frontend"
+echo "  Enable on boot: sudo systemctl enable deltaup-backend deltaup-frontend"
+echo "  Check status: sudo systemctl status deltaup-backend deltaup-frontend"
+echo ""
+echo "📋 Logs: $LOG_FILE"
 
