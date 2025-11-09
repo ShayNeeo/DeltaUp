@@ -380,16 +380,14 @@ else
     fi
 fi
 
-# Create systemd services for frontend and backend (skip if already exist)
-if [ -f "/etc/systemd/system/deltaup-backend.service" ] && [ -f "/etc/systemd/system/deltaup-frontend.service" ]; then
-    log_info "📋 Skipping systemd services - already configured"
-else
-    log_info "📋 Setting up systemd services..."
+# Create/update systemd services for frontend and backend
+log_info "📋 Setting up systemd services..."
 
-    # Backend service
-    log_debug "Creating backend systemd service"
-    BACKEND_USER=$(whoami)
-    if sudo tee /etc/systemd/system/deltaup-backend.service > /dev/null <<EOF
+# Backend service (always overwrite to ensure correct configuration)
+log_debug "Creating/updating backend systemd service"
+BACKEND_USER=$(whoami)
+sudo rm -f /etc/systemd/system/deltaup-backend.service
+if sudo tee /etc/systemd/system/deltaup-backend.service > /dev/null <<EOF
 [Unit]
 Description=DeltaUp Backend Service
 After=network.target
@@ -410,17 +408,18 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 EOF
-    then
-        log_success "Backend service created"
-    else
-        log_error "Failed to create backend service"
-        exit 1
-    fi
+then
+    log_success "Backend service created"
+else
+    log_error "Failed to create backend service"
+    exit 1
+fi
 
-    # Frontend service
-    log_debug "Creating frontend systemd service"
-    FRONTEND_USER=$(whoami)
-    if sudo tee /etc/systemd/system/deltaup-frontend.service > /dev/null <<EOF
+# Frontend service (always overwrite to ensure correct configuration)
+log_debug "Creating/updating frontend systemd service"
+FRONTEND_USER=$(whoami)
+sudo rm -f /etc/systemd/system/deltaup-frontend.service
+if sudo tee /etc/systemd/system/deltaup-frontend.service > /dev/null <<EOF
 [Unit]
 Description=DeltaUp Frontend Service
 After=network.target deltaup-backend.service
@@ -441,19 +440,18 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 EOF
-    then
-        log_success "Frontend service created"
-    else
-        log_error "Failed to create frontend service"
-        exit 1
-    fi
+then
+    log_success "Frontend service created"
+else
+    log_error "Failed to create frontend service"
+    exit 1
+fi
 
-    if sudo systemctl daemon-reload 2>&1 | tee -a "$LOG_FILE"; then
-        log_success "Systemd daemon reloaded"
-    else
-        log_error "Failed to reload systemd daemon"
-        exit 1
-    fi
+if sudo systemctl daemon-reload 2>&1 | tee -a "$LOG_FILE"; then
+    log_success "Systemd daemon reloaded"
+else
+    log_error "Failed to reload systemd daemon"
+    exit 1
 fi
 
 # Setup auto-renewal for SSL certificates (skip if already configured)
