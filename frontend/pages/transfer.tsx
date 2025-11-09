@@ -26,7 +26,7 @@ export default function Transfer() {
 
     try {
       const token = localStorage.getItem('token')
-      const response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/transfer`, formData, {
+      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/transfer`, formData, {
         headers: { Authorization: `Bearer ${token}` }
       })
 
