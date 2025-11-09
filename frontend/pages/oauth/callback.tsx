@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import axios from 'axios'
+import Preloader from '@/components/Preloader'
 
 export default function OAuthCallback() {
   const router = useRouter()
@@ -40,17 +41,10 @@ export default function OAuthCallback() {
     if (router.isReady) {
       handleCallback()
     }
-  }, [router.isReady, router.query])
+  }, [router, router.isReady, router.query])
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary to-secondary">
-        <div className="text-white text-center">
-          <h1 className="text-3xl font-bold mb-4">Processing Login...</h1>
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto"></div>
-        </div>
-      </div>
-    )
+    return <Preloader message="Processing your login..." fullScreen />
   }
 
   if (error) {

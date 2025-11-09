@@ -102,7 +102,7 @@ export default function Home() {
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-8">
             <h3 className="text-2xl font-bold text-blue-900 mb-4">🔒 Your Data, Your Control</h3>
             <p className="text-blue-800 leading-relaxed">
-              DeltaUp is designed around user privacy and data ownership. We don't store personal information beyond what's necessary for transactions. Your data remains encrypted and under your complete control.
+              DeltaUp is designed around user privacy and data ownership. We don&apos;t store personal information beyond what&apos;s necessary for transactions. Your data remains encrypted and under your complete control.
             </p>
           </div>
           <div className="bg-green-50 border border-green-200 rounded-xl p-8">
