@@ -79,13 +79,13 @@ log_info "📁 Project Directory: $PROJECT_DIR"
 
 # Update system
 log_info "📦 Updating system packages..."
-if sudo apt-get update -qq >> "$LOG_FILE" 2>&1; then
+if sudo apt-get update -qq 2>&1 | tee -a "$LOG_FILE"; then
     log_debug "apt-get update completed"
 else
     log_warning "apt-get update encountered issues"
 fi
 
-if sudo apt-get install -y -qq curl wget git nginx certbot python3-certbot-nginx >> "$LOG_FILE" 2>&1; then
+if sudo apt-get install -y -qq curl wget git nginx certbot python3-certbot-nginx 2>&1 | tee -a "$LOG_FILE"; then
     log_success "System packages installed"
 else
     log_error "Failed to install system packages"
@@ -95,14 +95,14 @@ fi
 # Check if Node.js is installed
 if ! command -v node &> /dev/null; then
     log_info "📦 Installing Node.js v18..."
-    if curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash - >> "$LOG_FILE" 2>&1; then
+    if curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash - 2>&1 | tee -a "$LOG_FILE"; then
         log_debug "Node.js repository added"
     else
         log_error "Failed to add Node.js repository"
         exit 1
     fi
     
-    if sudo apt-get install -y -qq nodejs >> "$LOG_FILE" 2>&1; then
+    if sudo apt-get install -y -qq nodejs 2>&1 | tee -a "$LOG_FILE"; then
         log_success "Node.js installed: $(node --version)"
     else
         log_error "Failed to install Node.js"
@@ -115,7 +115,7 @@ fi
 # Check if Rust is installed
 if ! command -v cargo &> /dev/null; then
     log_info "📦 Installing Rust..."
-    if curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y >> "$LOG_FILE" 2>&1; then
+    if curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y 2>&1 | tee -a "$LOG_FILE"; then
         source $HOME/.cargo/env
         log_success "Rust installed: $(cargo --version)"
     else
@@ -129,14 +129,14 @@ fi
 # Frontend setup
 log_info "📦 Setting up Next.js Frontend..."
 cd "$PROJECT_DIR/frontend"
-if npm install --legacy-peer-deps >> "$LOG_FILE" 2>&1; then
+if npm install --legacy-peer-deps 2>&1 | tee -a "$LOG_FILE"; then
     log_debug "npm dependencies installed"
 else
     log_error "Failed to install npm dependencies"
     exit 1
 fi
 
-if DOMAIN=$DOMAIN npm run build >> "$LOG_FILE" 2>&1; then
+if DOMAIN=$DOMAIN npm run build 2>&1 | tee -a "$LOG_FILE"; then
     log_success "Next.js frontend build completed"
 else
     log_error "Frontend build failed"
@@ -146,7 +146,7 @@ fi
 # Backend setup
 log_info "🦀 Setting up Rust Backend..."
 cd "$PROJECT_DIR/backend"
-if cargo build --release >> "$LOG_FILE" 2>&1; then
+if cargo build --release 2>&1 | tee -a "$LOG_FILE"; then
     log_success "Rust backend build completed"
 else
     log_error "Backend build failed"
@@ -164,7 +164,7 @@ if [ ! -d "$CERT_DIR" ]; then
         --email $EMAIL \
         -d $DOMAIN \
         -d www.$DOMAIN \
-        --preferred-challenges http >> "$LOG_FILE" 2>&1; then
+        --preferred-challenges http 2>&1 | tee -a "$LOG_FILE"; then
         log_success "SSL certificate generated successfully!"
     else
         log_error "Failed to generate SSL certificate"
@@ -259,14 +259,14 @@ sudo rm -f /etc/nginx/sites-enabled/default
 
 # Test and reload nginx
 log_info "Testing Nginx configuration..."
-if sudo nginx -t >> "$LOG_FILE" 2>&1; then
+if sudo nginx -t 2>&1 | tee -a "$LOG_FILE"; then
     log_debug "Nginx configuration test passed"
 else
     log_error "Nginx configuration test failed"
     exit 1
 fi
 
-if sudo systemctl restart nginx >> "$LOG_FILE" 2>&1; then
+if sudo systemctl restart nginx 2>&1 | tee -a "$LOG_FILE"; then
     log_success "Nginx restarted successfully"
 else
     log_error "Failed to restart Nginx"
@@ -331,7 +331,7 @@ else
     exit 1
 fi
 
-if sudo systemctl daemon-reload >> "$LOG_FILE" 2>&1; then
+if sudo systemctl daemon-reload 2>&1 | tee -a "$LOG_FILE"; then
     log_success "Systemd daemon reloaded"
 else
     log_error "Failed to reload systemd daemon"
