@@ -2,80 +2,181 @@
 
 set -e
 
+# ============================================================================
+# Enhanced Logging Functions
+# ============================================================================
+LOG_DIR="/var/log/deltaup"
+LOG_FILE="$LOG_DIR/install-$(date +%Y%m%d-%H%M%S).log"
+ERROR_LOG="$LOG_DIR/install-errors.log"
+
+# Create log directory if it doesn't exist
+mkdir -p "$LOG_DIR" 2>/dev/null || sudo mkdir -p "$LOG_DIR"
+sudo chmod 755 "$LOG_DIR" 2>/dev/null || true
+
+# Function to log messages
+log_info() {
+    local msg="$1"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[INFO] $timestamp - $msg" | tee -a "$LOG_FILE"
+}
+
+log_success() {
+    local msg="$1"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[✓] $timestamp - $msg" | tee -a "$LOG_FILE"
+}
+
+log_error() {
+    local msg="$1"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[✗] $timestamp - ERROR: $msg" | tee -a "$LOG_FILE" "$ERROR_LOG"
+}
+
+log_warning() {
+    local msg="$1"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[!] $timestamp - WARNING: $msg" | tee -a "$LOG_FILE"
+}
+
+log_debug() {
+    local msg="$1"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    if [ "$DEBUG_MODE" == "true" ]; then
+        echo "[DEBUG] $timestamp - $msg" | tee -a "$LOG_FILE"
+    else
+        echo "[DEBUG] $timestamp - $msg" >> "$LOG_FILE"
+    fi
+}
+
+# Trap errors and log them
+trap 'log_error "Installation failed at line $LINENO"; exit 1' ERR
+
 # Load environment variables
 if [ -f .env.production ]; then
+    log_debug "Loading .env.production"
     export $(cat .env.production | grep -v '^#' | xargs)
 fi
 
 # Check required environment variables
 if [ -z "$DOMAIN" ]; then
-    echo "❌ Error: DOMAIN environment variable not set"
+    log_error "DOMAIN environment variable not set"
     echo "Usage: DOMAIN=deltaup.io EMAIL=admin@deltaup.io ./install.sh"
     exit 1
 fi
 
 if [ -z "$EMAIL" ]; then
-    echo "❌ Error: EMAIL environment variable not set"
+    log_error "EMAIL environment variable not set"
     echo "Usage: DOMAIN=deltaup.io EMAIL=admin@deltaup.io ./install.sh"
     exit 1
 fi
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "🚀 Setting up DeltaUp Production Environment..."
-echo "📍 Domain: $DOMAIN"
-echo "📧 Email: $EMAIL"
+log_info "🚀 Setting up DeltaUp Production Environment"
+log_info "📍 Domain: $DOMAIN"
+log_info "📧 Email: $EMAIL"
+log_info "📁 Project Directory: $PROJECT_DIR"
 
 # Update system
-echo "📦 Updating system packages..."
-sudo apt-get update -qq
-sudo apt-get install -y -qq curl wget git nginx certbot python3-certbot-nginx > /dev/null 2>&1
+log_info "📦 Updating system packages..."
+if sudo apt-get update -qq >> "$LOG_FILE" 2>&1; then
+    log_debug "apt-get update completed"
+else
+    log_warning "apt-get update encountered issues"
+fi
+
+if sudo apt-get install -y -qq curl wget git nginx certbot python3-certbot-nginx >> "$LOG_FILE" 2>&1; then
+    log_success "System packages installed"
+else
+    log_error "Failed to install system packages"
+    exit 1
+fi
 
 # Check if Node.js is installed
 if ! command -v node &> /dev/null; then
-    echo "📦 Installing Node.js..."
-    curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash - > /dev/null 2>&1
-    sudo apt-get install -y -qq nodejs > /dev/null 2>&1
+    log_info "📦 Installing Node.js v18..."
+    if curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash - >> "$LOG_FILE" 2>&1; then
+        log_debug "Node.js repository added"
+    else
+        log_error "Failed to add Node.js repository"
+        exit 1
+    fi
+    
+    if sudo apt-get install -y -qq nodejs >> "$LOG_FILE" 2>&1; then
+        log_success "Node.js installed: $(node --version)"
+    else
+        log_error "Failed to install Node.js"
+        exit 1
+    fi
+else
+    log_info "Node.js already installed: $(node --version)"
 fi
 
 # Check if Rust is installed
 if ! command -v cargo &> /dev/null; then
-    echo "📦 Installing Rust..."
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y > /dev/null 2>&1
-    source $HOME/.cargo/env
+    log_info "📦 Installing Rust..."
+    if curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y >> "$LOG_FILE" 2>&1; then
+        source $HOME/.cargo/env
+        log_success "Rust installed: $(cargo --version)"
+    else
+        log_error "Failed to install Rust"
+        exit 1
+    fi
+else
+    log_info "Rust already installed: $(cargo --version)"
 fi
 
 # Frontend setup
-echo "📦 Setting up Next.js Frontend..."
+log_info "📦 Setting up Next.js Frontend..."
 cd "$PROJECT_DIR/frontend"
-npm install --legacy-peer-deps > /dev/null 2>&1
-DOMAIN=$DOMAIN npm run build > /dev/null 2>&1
+if npm install --legacy-peer-deps >> "$LOG_FILE" 2>&1; then
+    log_debug "npm dependencies installed"
+else
+    log_error "Failed to install npm dependencies"
+    exit 1
+fi
+
+if DOMAIN=$DOMAIN npm run build >> "$LOG_FILE" 2>&1; then
+    log_success "Next.js frontend build completed"
+else
+    log_error "Frontend build failed"
+    exit 1
+fi
 
 # Backend setup
-echo "🦀 Setting up Rust Backend..."
+log_info "🦀 Setting up Rust Backend..."
 cd "$PROJECT_DIR/backend"
-cargo build --release 2>&1 | grep -E "Compiling|Finished" || true
+if cargo build --release >> "$LOG_FILE" 2>&1; then
+    log_success "Rust backend build completed"
+else
+    log_error "Backend build failed"
+    exit 1
+fi
 
 # Create SSL certificates with Let's Encrypt
-echo "🔒 Setting up SSL Certificate with Let's Encrypt..."
+log_info "🔒 Setting up SSL Certificate with Let's Encrypt..."
 CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
 if [ ! -d "$CERT_DIR" ]; then
-    echo "Generating new certificate for $DOMAIN..."
-    sudo certbot certonly --standalone \
+    log_info "Generating new certificate for $DOMAIN..."
+    if sudo certbot certonly --standalone \
         --non-interactive \
         --agree-tos \
         --email $EMAIL \
         -d $DOMAIN \
         -d www.$DOMAIN \
-        --preferred-challenges http
-    echo "✅ Certificate generated successfully!"
+        --preferred-challenges http >> "$LOG_FILE" 2>&1; then
+        log_success "SSL certificate generated successfully!"
+    else
+        log_error "Failed to generate SSL certificate"
+        exit 1
+    fi
 else
-    echo "✅ Certificate already exists at $CERT_DIR"
+    log_success "SSL certificate already exists at $CERT_DIR"
 fi
 
 # Setup Nginx configuration
-echo "🌐 Configuring Nginx reverse proxy..."
-sudo tee /etc/nginx/sites-available/$DOMAIN > /dev/null <<EOF
+log_info "🌐 Configuring Nginx reverse proxy..."
+if sudo tee /etc/nginx/sites-available/$DOMAIN > /dev/null <<EOF
 upstream deltaup_backend {
     server 127.0.0.1:8000;
 }
@@ -144,21 +245,40 @@ server {
     }
 }
 EOF
+then
+    log_success "Nginx configuration created"
+else
+    log_error "Failed to create Nginx configuration"
+    exit 1
+fi
 
 # Enable nginx site
-sudo ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/$DOMAIN 2>/dev/null || true
+log_debug "Enabling Nginx site configuration"
+sudo ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/$DOMAIN 2>/dev/null || log_warning "Could not create symlink"
 sudo rm -f /etc/nginx/sites-enabled/default
 
 # Test and reload nginx
-echo "Testing Nginx configuration..."
-sudo nginx -t
-sudo systemctl restart nginx
+log_info "Testing Nginx configuration..."
+if sudo nginx -t >> "$LOG_FILE" 2>&1; then
+    log_debug "Nginx configuration test passed"
+else
+    log_error "Nginx configuration test failed"
+    exit 1
+fi
+
+if sudo systemctl restart nginx >> "$LOG_FILE" 2>&1; then
+    log_success "Nginx restarted successfully"
+else
+    log_error "Failed to restart Nginx"
+    exit 1
+fi
 
 # Create systemd services for frontend and backend
-echo "📋 Setting up systemd services..."
+log_info "📋 Setting up systemd services..."
 
 # Backend service
-sudo tee /etc/systemd/system/deltaup-backend.service > /dev/null <<EOF
+log_debug "Creating backend systemd service"
+if sudo tee /etc/systemd/system/deltaup-backend.service > /dev/null <<EOF
 [Unit]
 Description=DeltaUp Backend Service
 After=network.target
@@ -177,9 +297,16 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
+then
+    log_success "Backend service created"
+else
+    log_error "Failed to create backend service"
+    exit 1
+fi
 
 # Frontend service
-sudo tee /etc/systemd/system/deltaup-frontend.service > /dev/null <<EOF
+log_debug "Creating frontend systemd service"
+if sudo tee /etc/systemd/system/deltaup-frontend.service > /dev/null <<EOF
 [Unit]
 Description=DeltaUp Frontend Service
 After=network.target
@@ -197,25 +324,49 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
+then
+    log_success "Frontend service created"
+else
+    log_error "Failed to create frontend service"
+    exit 1
+fi
 
-sudo systemctl daemon-reload
+if sudo systemctl daemon-reload >> "$LOG_FILE" 2>&1; then
+    log_success "Systemd daemon reloaded"
+else
+    log_error "Failed to reload systemd daemon"
+    exit 1
+fi
 
 # Setup auto-renewal for SSL certificates
-echo "⚙️ Setting up automatic SSL certificate renewal..."
-sudo tee /etc/cron.d/certbot-renew > /dev/null <<EOF
+log_info "⚙️ Setting up automatic SSL certificate renewal..."
+if sudo tee /etc/cron.d/certbot-renew > /dev/null <<EOF
 0 2 1 * * root certbot renew --quiet && systemctl reload nginx
 EOF
+then
+    log_success "SSL auto-renewal cron job configured"
+else
+    log_error "Failed to configure SSL auto-renewal"
+    exit 1
+fi
 
 # Create .env.production file
-echo "📝 Creating .env.production..."
-tee "$PROJECT_DIR/.env.production" > /dev/null <<EOF
+log_info "📝 Creating .env.production..."
+if tee "$PROJECT_DIR/.env.production" > /dev/null <<EOF
 DOMAIN=$DOMAIN
 EMAIL=$EMAIL
 PROJECT_DIR=$PROJECT_DIR
 EOF
+then
+    log_success ".env.production created"
+else
+    log_error "Failed to create .env.production"
+    exit 1
+fi
 
+# Display completion summary
 echo ""
-echo "✅ Setup complete!"
+log_success "✅ Setup complete!"
 echo ""
 echo "📊 Next steps:"
 echo "1. Start backend: sudo systemctl start deltaup-backend"
@@ -225,6 +376,8 @@ echo "4. Check status: sudo systemctl status deltaup-backend deltaup-frontend"
 echo ""
 echo "🌐 Your application is ready at: https://$DOMAIN"
 echo "📜 SSL Certificate: /etc/letsencrypt/live/$DOMAIN/"
+echo "📋 Full installation logs: $LOG_FILE"
+echo "⚠️  Error logs: $ERROR_LOG"
 echo ""
 echo "🔄 Auto-renewal: Certificates will auto-renew on the 1st of each month at 2 AM"
 
