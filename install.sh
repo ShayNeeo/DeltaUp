@@ -229,13 +229,8 @@ log_success "✓ All required packages verified: next, react, react-dom, axios"
 
 # Generate Next.js TypeScript environment file
 log_info "📝 Generating Next.js TypeScript environment..."
-if npx next telemetry disable 2>&1 >> "$LOG_FILE" && npx next build --dry-run 2>&1 >> "$LOG_FILE" || true; then
-    log_debug "Next.js TypeScript environment initialized"
-else
-    log_warning "Failed to initialize Next.js TypeScript environment"
-fi
 
-# Ensure next-env.d.ts exists
+# Ensure next-env.d.ts exists with proper Next.js 15+ content
 if [ ! -f "next-env.d.ts" ]; then
     log_info "🔧 Creating next-env.d.ts file..."
     cat > next-env.d.ts << 'EOF'
@@ -250,9 +245,17 @@ else
     log_debug "next-env.d.ts already exists"
 fi
 
-# Build frontend with DOMAIN environment variable
+# Initialize Next.js types by running TypeScript check once
+log_debug "Running initial TypeScript compilation to generate types..."
+if npx tsc --noEmit --skipLibCheck 2>&1 >> "$LOG_FILE" || true; then
+    log_debug "TypeScript initialization completed"
+else
+    log_warning "TypeScript initialization had issues"
+fi
+
+# Build frontend with proper environment variables
 log_info "Building Next.js frontend (this may take 1-2 minutes)..."
-if DOMAIN=$DOMAIN npm run build 2>&1 | tee -a "$LOG_FILE"; then
+if NODE_ENV=production DOMAIN=$DOMAIN npm run build 2>&1 | tee -a "$LOG_FILE"; then
     log_success "✓ Next.js frontend build completed successfully"
 else
     log_error "Frontend build failed - check logs for TypeScript errors"
