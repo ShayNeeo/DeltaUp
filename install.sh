@@ -205,6 +205,23 @@ fi
 log_info "Building Next.js frontend..."
 if NODE_ENV=production NEXT_PUBLIC_API_URL=https://$DOMAIN npm run build 2>&1 | tee -a "$LOG_FILE"; then
     log_success "✓ Next.js frontend build completed successfully"
+    
+    # Verify build output contains CSS
+    if [ ! -d ".next/static/css" ] || [ -z "$(ls -A .next/static/css/ 2>/dev/null)" ]; then
+        log_warning "⚠️  Warning: No CSS files found in .next/static/css/"
+        log_info "Checking .next directory structure..."
+        ls -la .next/static/ 2>&1 | tee -a "$LOG_FILE"
+    else
+        log_success "✓ CSS files generated in .next/static/css/"
+    fi
+    
+    # Fix permissions so frontend service can read files
+    log_info "Setting proper permissions on .next directory..."
+    if [ -d ".next" ]; then
+        sudo chown -R ubuntu:ubuntu .next 2>&1 >> "$LOG_FILE" || log_warning "Could not change .next owner"
+        sudo chmod -R 755 .next 2>&1 >> "$LOG_FILE" || log_warning "Could not change .next permissions"
+        log_success "✓ Permissions fixed on .next directory"
+    fi
 else
     log_error "Frontend build failed - check logs for TypeScript errors"
     exit 1
@@ -467,6 +484,17 @@ if sudo systemctl daemon-reload 2>&1 | tee -a "$LOG_FILE"; then
 else
     log_error "Failed to reload systemd daemon"
     exit 1
+fi
+
+# Restart frontend service to pick up the new build
+log_info "Restarting frontend service..."
+if sudo systemctl restart deltaup-frontend 2>&1 | tee -a "$LOG_FILE"; then
+    log_success "Frontend service restarted"
+    sleep 2
+    log_info "Checking frontend service status..."
+    sudo systemctl status deltaup-frontend 2>&1 | head -5 | tee -a "$LOG_FILE"
+else
+    log_warning "Failed to restart frontend service - may need manual restart"
 fi
 
 # Setup auto-renewal for SSL certificates (skip if already configured)

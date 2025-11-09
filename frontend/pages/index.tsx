@@ -33,83 +33,88 @@ export default function Home() {
     setUser(null)
   }
 
-  const features = [
-    {
-      icon: '💸',
-      title: 'Fast Transfers',
-      description: 'Send money instantly to any account',
-      href: '/transfer',
-      color: 'from-blue-500 to-blue-600'
-    },
-    {
-      icon: '💰',
-      title: 'Balance Check',
-      description: 'Real-time account balance tracking',
-      href: '/balance',
-      color: 'from-green-500 to-green-600'
-    },
-    {
-      icon: '📱',
-      title: 'QR Payments',
-      description: 'Generate and scan QR codes for payments',
-      href: '/qr-payment',
-      color: 'from-purple-500 to-purple-600'
-    }
-  ]
-
-  if (!isAuthenticated) {
+  if (isAuthenticated && user) {
     return (
-      <div className="space-y-12">
-        {/* Hero Section */}
-        <div className="bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 rounded-2xl p-12 md:p-16 text-white">
-          <div className="max-w-2xl">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4">
-              Welcome to DeltaUp
-            </h2>
-            <p className="text-xl text-blue-100 mb-8">
-              Your personal fintech platform for secure data management and seamless transfers through our API sandbox.
-            </p>
-            <button
-              onClick={handleOAuthLogin}
-              className="bg-white text-blue-600 px-8 py-4 rounded-lg font-bold text-lg hover:bg-blue-50 transition-all shadow-lg hover:shadow-xl"
-            >
-              Sign In Now →
-            </button>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
+        {/* Welcome Section */}
+        <div className="max-w-4xl mx-auto px-4 py-12">
+          <div className="mb-12">
+            <h1 className="text-4xl font-light text-slate-900 mb-2">
+              Welcome back, <span className="font-semibold">{user.name}</span>
+            </h1>
+            <p className="text-slate-500">Manage your finances with ease</p>
           </div>
-        </div>
 
-        {/* Features Grid */}
-        <div>
-          <h3 className="text-3xl font-bold text-slate-800 mb-8">Key Features</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {features.map((feature) => (
-              <div
-                key={feature.title}
-                className="bg-white rounded-xl shadow-md p-8 hover:shadow-lg transition-all border border-slate-200"
-              >
-                <div className={`text-4xl mb-4 bg-gradient-to-br ${feature.color} bg-clip-text text-transparent`}>
-                  {feature.icon}
+          {/* Quick Actions Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+            {/* Transfer */}
+            <Link href="/transfer">
+              <div className="group p-6 bg-white rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer">
+                <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-blue-100 transition-colors">
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
                 </div>
-                <h4 className="text-xl font-bold text-slate-800 mb-2">{feature.title}</h4>
-                <p className="text-slate-600">{feature.description}</p>
+                <h3 className="font-semibold text-slate-900 mb-1">Send Money</h3>
+                <p className="text-sm text-slate-500">Transfer funds instantly</p>
               </div>
-            ))}
-          </div>
-        </div>
+            </Link>
 
-        {/* Info Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-8">
-            <h3 className="text-2xl font-bold text-blue-900 mb-4">🔒 Your Data, Your Control</h3>
-            <p className="text-blue-800 leading-relaxed">
-              DeltaUp is designed around user privacy and data ownership. We don&apos;t store personal information beyond what&apos;s necessary for transactions. Your data remains encrypted and under your complete control.
-            </p>
+            {/* Balance */}
+            <Link href="/balance">
+              <div className="group p-6 bg-white rounded-xl border border-slate-200 hover:border-green-300 hover:shadow-md transition-all cursor-pointer">
+                <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-green-100 transition-colors">
+                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-slate-900 mb-1">Check Balance</h3>
+                <p className="text-sm text-slate-500">View your account balance</p>
+              </div>
+            </Link>
+
+            {/* QR Payment */}
+            <Link href="/qr-payment">
+              <div className="group p-6 bg-white rounded-xl border border-slate-200 hover:border-purple-300 hover:shadow-md transition-all cursor-pointer">
+                <div className="w-12 h-12 bg-purple-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-purple-100 transition-colors">
+                  <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-slate-900 mb-1">QR Payment</h3>
+                <p className="text-sm text-slate-500">Scan to pay instantly</p>
+              </div>
+            </Link>
           </div>
-          <div className="bg-green-50 border border-green-200 rounded-xl p-8">
-            <h3 className="text-2xl font-bold text-green-900 mb-4">🧪 Sandbox API</h3>
-            <p className="text-green-800 leading-relaxed">
-              All transfers are processed through a secure sandbox environment. Perfect for testing and demonstration. No real money involved—just pure financial workflow exploration.
-            </p>
+
+          {/* Stats Section */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-4 bg-white rounded-lg border border-slate-200">
+              <p className="text-xs text-slate-500 mb-1">Status</p>
+              <p className="font-semibold text-slate-900">Active</p>
+            </div>
+            <div className="p-4 bg-white rounded-lg border border-slate-200">
+              <p className="text-xs text-slate-500 mb-1">Email</p>
+              <p className="font-semibold text-slate-900 truncate">{user.email}</p>
+            </div>
+            <div className="p-4 bg-white rounded-lg border border-slate-200">
+              <p className="text-xs text-slate-500 mb-1">Account</p>
+              <p className="font-semibold text-slate-900 truncate">{user.account_number || 'N/A'}</p>
+            </div>
+            <div className="p-4 bg-white rounded-lg border border-slate-200">
+              <p className="text-xs text-slate-500 mb-1">Member</p>
+              <p className="font-semibold text-slate-900">2025</p>
+            </div>
+          </div>
+
+          {/* Logout Button */}
+          <div className="mt-12 flex justify-center">
+            <button
+              onClick={handleLogout}
+              className="px-8 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900 border border-slate-300 hover:border-slate-400 rounded-lg transition-colors"
+            >
+              Sign Out
+            </button>
           </div>
         </div>
       </div>
@@ -117,65 +122,51 @@ export default function Home() {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Welcome Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-cyan-500 rounded-2xl p-8 text-white">
-        <h2 className="text-3xl font-bold mb-2">Welcome back, {user?.name}! 👋</h2>
-        <p className="text-blue-100">Your personal fintech dashboard</p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 flex flex-col items-center justify-center px-4">
+      {/* Hero Section */}
+      <div className="max-w-2xl mx-auto text-center mb-12">
+        <div className="inline-block p-3 bg-blue-50 rounded-full mb-6">
+          <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        </div>
+        <h1 className="text-5xl font-light text-slate-900 mb-4">
+          DeltaUp
+        </h1>
+        <p className="text-lg text-slate-600 mb-2">Modern financial management</p>
+        <p className="text-sm text-slate-500">Built for speed and simplicity</p>
       </div>
 
-      {/* Quick Actions */}
-      <div>
-        <h3 className="text-2xl font-bold text-slate-800 mb-6">Quick Actions</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {features.map((feature) => (
-            <Link key={feature.href} href={feature.href}>
-              <div className="bg-gradient-to-br from-white to-slate-50 border border-slate-200 rounded-xl p-8 hover:border-blue-300 hover:shadow-lg transition-all cursor-pointer group">
-                <div className="text-5xl mb-4 group-hover:scale-110 transition-transform">{feature.icon}</div>
-                <h4 className="text-xl font-bold text-slate-800 mb-2">{feature.title}</h4>
-                <p className="text-slate-600 mb-4">{feature.description}</p>
-                <div className="text-blue-600 font-semibold group-hover:translate-x-2 transition-transform">
-                  Go →
-                </div>
-              </div>
-            </Link>
-          ))}
+      {/* Features Preview */}
+      <div className="max-w-3xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+        <div className="text-center">
+          <div className="text-3xl mb-3">⚡</div>
+          <h3 className="font-semibold text-slate-900 mb-1">Instant Transfers</h3>
+          <p className="text-sm text-slate-500">Send money in seconds</p>
+        </div>
+        <div className="text-center">
+          <div className="text-3xl mb-3">🔒</div>
+          <h3 className="font-semibold text-slate-900 mb-1">Secure & Safe</h3>
+          <p className="text-sm text-slate-500">Bank-grade security</p>
+        </div>
+        <div className="text-center">
+          <div className="text-3xl mb-3">📱</div>
+          <h3 className="font-semibold text-slate-900 mb-1">QR Payments</h3>
+          <p className="text-sm text-slate-500">Modern payment methods</p>
         </div>
       </div>
 
-      {/* Account Info */}
-      <div className="bg-white border border-slate-200 rounded-xl p-8 shadow-sm">
-        <h3 className="text-2xl font-bold text-slate-800 mb-6">Account Information</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">👤</span>
-            </div>
-            <div>
-              <p className="text-sm text-slate-600">Full Name</p>
-              <p className="text-lg font-semibold text-slate-800">{user?.name}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">🏦</span>
-            </div>
-            <div>
-              <p className="text-sm text-slate-600">Account Number</p>
-              <p className="text-lg font-semibold text-slate-800">{user?.account_number || '****'}</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Login Button */}
+      <button
+        onClick={handleOAuthLogin}
+        className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors shadow-sm hover:shadow-md"
+      >
+        Sign In with OAuth
+      </button>
 
-      {/* Logout Button */}
-      <div className="flex justify-end">
-        <button
-          onClick={handleLogout}
-          className="px-6 py-3 bg-red-100 text-red-600 rounded-lg font-semibold hover:bg-red-200 transition-colors"
-        >
-          Logout
-        </button>
+      {/* Footer */}
+      <div className="mt-16 text-center text-sm text-slate-500">
+        <p>A modern fintech platform for financial management</p>
       </div>
     </div>
   )
