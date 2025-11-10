@@ -9,13 +9,18 @@ export default function OAuthCallback() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    const startTime = Date.now()
+    const minDisplayTime = 800 // Minimum 800ms display time
+
     const handleCallback = async () => {
       try {
         const { code } = router.query
         
         if (!code) {
           setError('No authorization code received')
-          setLoading(false)
+          const elapsed = Date.now() - startTime
+          const remaining = Math.max(0, minDisplayTime - elapsed)
+          setTimeout(() => setLoading(false), remaining)
           return
         }
 
@@ -30,11 +35,18 @@ export default function OAuthCallback() {
         localStorage.setItem('token', response.data.access_token)
         localStorage.setItem('user', JSON.stringify(response.data.user))
         
-        setLoading(false)
-        router.push('/')
+        const elapsed = Date.now() - startTime
+        const remaining = Math.max(0, minDisplayTime - elapsed)
+        
+        setTimeout(() => {
+          setLoading(false)
+          setTimeout(() => router.push('/'), 200)
+        }, remaining)
       } catch (err: any) {
         setError(err.response?.data?.message || 'OAuth callback failed')
-        setLoading(false)
+        const elapsed = Date.now() - startTime
+        const remaining = Math.max(0, minDisplayTime - elapsed)
+        setTimeout(() => setLoading(false), remaining)
       }
     }
 
@@ -44,7 +56,7 @@ export default function OAuthCallback() {
   }, [router, router.isReady, router.query])
 
   if (loading) {
-    return <Preloader message="Processing your login..." fullScreen />
+    return <Preloader message="Processing your login..." fullScreen minDisplayTime={800} />
   }
 
   if (error) {
