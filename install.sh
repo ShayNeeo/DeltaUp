@@ -294,64 +294,91 @@ else
     exit 1
 fi
 
-# Create SSL certificates with Let's Encrypt
-log_info "🔒 Setting up SSL Certificate with Let's Encrypt..."
-CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
-if [ ! -d "$CERT_DIR" ]; then
-    log_info "Generating SSL certificate for $DOMAIN..."
-    if sudo certbot certonly --webroot \
-        --webroot-path=/var/www/certbot \
-        --non-interactive \
-        --agree-tos \
-        --email $EMAIL \
-        -d $DOMAIN \
-        -d www.$DOMAIN \
-        --preferred-challenges http \
-        --rsa-key-size 4096 \
-        --key-type rsa \
-        --expand 2>&1 | tee -a "$LOG_FILE"; then
-        log_success "SSL certificate generated successfully!"
-    else
-        log_error "Failed to generate SSL certificate"
-        exit 1
-    fi
-else
-    log_info "SSL certificate already exists - verifying and renewing if needed..."
-    # Force renewal check to ensure certificate is valid
-    if sudo certbot renew --dry-run --webroot --webroot-path=/var/www/certbot 2>&1 | tee -a "$LOG_FILE"; then
-        log_success "SSL certificate is valid"
-    else
-        log_warning "SSL certificate may need renewal - attempting renewal..."
-        if sudo certbot renew --webroot --webroot-path=/var/www/certbot --force-renewal 2>&1 | tee -a "$LOG_FILE"; then
-            log_success "SSL certificate renewed successfully"
-        else
-            log_warning "Certificate renewal had issues - may need manual intervention"
-        fi
-    fi
-fi
-
-# Verify certificate files exist and are readable
-log_info "Verifying SSL certificate files..."
-if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
-    log_error "fullchain.pem not found - certificate may be incomplete"
-    exit 1
-fi
-if [ ! -f "/etc/letsencrypt/live/$DOMAIN/privkey.pem" ]; then
-    log_error "privkey.pem not found - certificate may be incomplete"
-    exit 1
-fi
-if [ ! -f "/etc/letsencrypt/live/$DOMAIN/chain.pem" ]; then
-    log_warning "chain.pem not found - creating symlink from fullchain.pem"
-    sudo ln -sf /etc/letsencrypt/live/$DOMAIN/fullchain.pem /etc/letsencrypt/live/$DOMAIN/chain.pem 2>&1 || log_warning "Could not create chain.pem symlink"
-fi
-log_success "SSL certificate files verified"
-
-# Ensure certbot renewal directory exists
+# Prepare certbot webroot directory BEFORE certificate request
+log_info "🔒 Preparing Let's Encrypt environment..."
 if [ ! -d "/var/www/certbot" ]; then
     log_debug "Creating certbot webroot directory"
     sudo mkdir -p /var/www/certbot
     sudo chmod 755 /var/www/certbot
+    log_success "Certbot webroot directory created"
 fi
+
+# Create temporary nginx config for ACME challenge validation
+log_debug "Setting up temporary ACME challenge handler..."
+if sudo tee /etc/nginx/sites-available/$DOMAIN > /dev/null <<'NGINX_TEMP'
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $DOMAIN www.$DOMAIN;
+    
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        try_files $uri =404;
+    }
+    
+    location / {
+        return 200 "Setup in progress...";
+    }
+}
+NGINX_TEMP
+then
+    sudo sed -i "s/\\\$DOMAIN/$DOMAIN/g" /etc/nginx/sites-available/$DOMAIN
+    sudo ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/$DOMAIN 2>/dev/null || true
+    sudo systemctl reload nginx 2>&1 >> "$LOG_FILE" || log_warning "Could not reload nginx"
+    sleep 2
+    log_debug "Temporary ACME handler ready"
+else
+    log_warning "Could not setup temporary ACME handler"
+fi
+
+# Create SSL certificates with Let's Encrypt
+log_info "🔒 Requesting SSL Certificate from Let's Encrypt..."
+CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
+
+if [ ! -d "$CERT_DIR" ]; then
+    log_info "Generating new SSL certificate for $DOMAIN..."
+    if sudo certbot certonly --webroot \
+        --webroot-path=/var/www/certbot \
+        --non-interactive \
+        --agree-tos \
+        --email "$EMAIL" \
+        -d "$DOMAIN" \
+        -d "www.$DOMAIN" \
+        --preferred-challenges http \
+        --rsa-key-size 4096 \
+        --key-type rsa \
+        --expand 2>&1 | tee -a "$LOG_FILE"; then
+        log_success "✅ SSL certificate generated successfully!"
+    else
+        log_error "❌ Failed to generate SSL certificate - check logs above"
+        sudo certbot certificates 2>&1 | tee -a "$LOG_FILE"
+        exit 1
+    fi
+else
+    log_info "SSL certificate already exists at $CERT_DIR"
+    log_info "Certificate validity:"
+    sudo openssl x509 -in "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" -noout -dates 2>&1 | tee -a "$LOG_FILE"
+fi
+
+# Verify certificate files exist and are readable
+log_info "✓ Verifying SSL certificate files..."
+for cert_file in "fullchain.pem" "privkey.pem"; do
+    if [ ! -f "/etc/letsencrypt/live/$DOMAIN/$cert_file" ]; then
+        log_error "❌ $cert_file not found at /etc/letsencrypt/live/$DOMAIN/"
+        log_info "Available certificates:"
+        sudo certbot certificates 2>&1 | tee -a "$LOG_FILE"
+        exit 1
+    fi
+    log_debug "✓ $cert_file found"
+done
+
+# Create chain.pem symlink if needed
+if [ ! -f "/etc/letsencrypt/live/$DOMAIN/chain.pem" ]; then
+    log_debug "Creating chain.pem symlink"
+    sudo ln -sf /etc/letsencrypt/live/$DOMAIN/fullchain.pem /etc/letsencrypt/live/$DOMAIN/chain.pem 2>&1 || log_warning "Could not create chain.pem symlink"
+fi
+
+log_success "✅ SSL certificate verification complete"
 
 # Setup Nginx configuration
 log_info "🌐 Configuring Nginx reverse proxy..."
@@ -617,13 +644,18 @@ if [ -f "/etc/cron.d/certbot-renew" ]; then
     log_info "⚙️  Skipping SSL renewal setup - already configured"
 else
     log_info "⚙️ Setting up automatic SSL certificate renewal..."
-    if sudo tee /etc/cron.d/certbot-renew > /dev/null <<EOF
+    if sudo tee /etc/cron.d/certbot-renew > /dev/null <<'EOF'
 # Auto-renew Let's Encrypt certificates using webroot method
 # Runs daily at 2:30 AM to avoid peak traffic times
-30 2 * * * root certbot renew --webroot --webroot-path=/var/www/certbot --quiet && systemctl reload nginx
 
-# Additional renewal attempt at 14:30 (2:30 PM) in case of failures
-30 14 * * * root certbot renew --webroot --webroot-path=/var/www/certbot --quiet -q 2>/dev/null || true
+# Primary renewal attempt
+30 2 * * * root certbot renew --webroot --webroot-path=/var/www/certbot --quiet >> /var/log/deltaup/certbot-renew.log 2>&1 && systemctl reload nginx >> /var/log/deltaup/certbot-renew.log 2>&1 || true
+
+# Backup renewal attempt at 14:30 (2:30 PM) in case of failures
+30 14 * * * root certbot renew --webroot --webroot-path=/var/www/certbot --quiet >> /var/log/deltaup/certbot-renew.log 2>&1 || true
+
+# Weekly certificate status check (Monday at 3:00 AM)
+0 3 * * 1 root certbot certificates >> /var/log/deltaup/certbot-renew.log 2>&1
 EOF
     then
         log_success "SSL auto-renewal cron jobs configured"
