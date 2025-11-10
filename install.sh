@@ -385,34 +385,21 @@ server {
 # HTTPS configuration
 server {
     listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-
     server_name $DOMAIN www.$DOMAIN;
 
-    # TLS Configuration - Enhanced for WiFi compatibility
+    # TLS Configuration - Simplified for maximum compatibility
     ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
     
-    # TLS protocols - Support both modern and older clients
+    # Basic TLS settings
     ssl_protocols TLSv1.2 TLSv1.3;
-    
-    # Cipher suites optimized for WiFi compatibility
-    # Prioritizes ECDHE and modern ciphers
-    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:AES128-GCM-SHA256:AES256-GCM-SHA384';
-    ssl_prefer_server_ciphers off;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
     
     # SSL session configuration
     ssl_session_cache shared:SSL:10m;
     ssl_session_timeout 10m;
     ssl_session_tickets off;
-    
-    # OCSP Stapling - WiFi compatible resolver configuration
-    ssl_stapling on;
-    ssl_stapling_verify on;
-    ssl_trusted_certificate /etc/letsencrypt/live/$DOMAIN/chain.pem;
-    # Use system resolver which works better with WiFi networks
-    resolver 127.0.0.1 [::1] valid=300s ipv6=off;
-    resolver_timeout 10s;
 
     # Security headers
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
