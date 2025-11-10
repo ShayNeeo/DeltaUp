@@ -3,13 +3,11 @@ import React, { useState, useEffect } from 'react'
 interface PreloaderProps {
   message?: string
   fullScreen?: boolean
-  minDisplayTime?: number
 }
 
 export default function Preloader({ 
   message = 'Loading...', 
-  fullScreen = false,
-  minDisplayTime = 500 
+  fullScreen = false
 }: PreloaderProps) {
   const [visible, setVisible] = useState(false)
 

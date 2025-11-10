@@ -56,7 +56,7 @@ export default function OAuthCallback() {
   }, [router, router.isReady, router.query])
 
   if (loading) {
-    return <Preloader message="Processing your login..." fullScreen minDisplayTime={800} />
+    return <Preloader message="Processing your login..." fullScreen />
   }
 
   if (error) {

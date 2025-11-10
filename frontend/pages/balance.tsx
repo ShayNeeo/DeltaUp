@@ -45,7 +45,7 @@ export default function Balance() {
   }, [])
 
   if (loading) {
-    return <Preloader message="Fetching your balance..." minDisplayTime={600} />
+    return <Preloader message="Fetching your balance..." />
   }
 
   return (
