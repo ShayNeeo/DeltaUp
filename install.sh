@@ -357,98 +357,111 @@ fi
 log_info "🌐 Configuring Nginx reverse proxy..."
 if sudo tee /etc/nginx/sites-available/$DOMAIN > /dev/null <<EOF
 upstream deltaup_backend {
-    server 127.0.0.1:8000;
+    server 127.0.0.1:8000 fail_timeout=0;
 }
 
 upstream deltaup_frontend {
-    server 127.0.0.1:3000;
+    server 127.0.0.1:3000 fail_timeout=0;
 }
 
-# HTTP to HTTPS redirect with Let's Encrypt renewal support
+# HTTP server - handle certbot renewal and redirect to HTTPS
 server {
-    listen 80;
-    listen [::]:80;
+    listen 80 default_server;
+    listen [::]:80 default_server;
     server_name $DOMAIN www.$DOMAIN;
-    
-    # Let's Encrypt ACME challenge location (required for webroot renewal)
+
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
         try_files \$uri =404;
     }
-    
-    # Redirect all other HTTP traffic to HTTPS
+
     location / {
         return 301 https://\$server_name\$request_uri;
     }
 }
 
-# HTTPS configuration
+# HTTPS server block - IPv4 + IPv6
 server {
     listen 443 ssl http2;
+    listen [::]:443 ssl http2;
     server_name $DOMAIN www.$DOMAIN;
 
-    # TLS Configuration - Simplified for maximum compatibility
+    # SSL Certificate Configuration
     ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-    
-    # Basic TLS settings
+
+    # TLS Protocol Configuration - Secure for all networks
     ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
     ssl_prefer_server_ciphers on;
     
-    # SSL session configuration
+    # Cipher suites - Compatible with WiFi networks
+    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384';
+
+    # SSL Session Configuration
     ssl_session_cache shared:SSL:10m;
     ssl_session_timeout 10m;
     ssl_session_tickets off;
 
-    # Security headers
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+    # Diffie-Hellman parameter
+    ssl_dhparam /etc/ssl/certs/dhparam.pem;
+
+    # Security Headers
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
 
+    # Client body size
     client_max_body_size 50M;
 
-    # API routes to backend
+    # API proxy
     location /api/ {
         proxy_pass http://deltaup_backend;
+        proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Connection "";
         proxy_redirect off;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
     }
 
-    # OAuth routes to backend
+    # OAuth proxy
     location /oauth/ {
         proxy_pass http://deltaup_backend;
+        proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Connection "";
         proxy_redirect off;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
     }
 
-    # Frontend - proxy all routes including static files to Next.js app
+    # Frontend proxy
     location / {
         proxy_pass http://deltaup_frontend;
+        proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header X-Forwarded-Host \$server_name;
-        proxy_redirect off;
-
+        
         # WebSocket support
-        proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
-
-        # Buffering settings
+        
+        proxy_redirect off;
         proxy_buffering off;
         proxy_request_buffering off;
-        
-        # Timeouts
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
@@ -460,6 +473,18 @@ then
 else
     log_error "Failed to create Nginx configuration"
     exit 1
+fi
+
+# Generate Diffie-Hellman parameters for forward secrecy
+log_info "Generating DH parameters (this may take a minute)..."
+if [ ! -f /etc/ssl/certs/dhparam.pem ]; then
+    if sudo openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048 2>&1 | tee -a "$LOG_FILE"; then
+        log_success "DH parameters generated"
+    else
+        log_warning "DH parameter generation failed - continuing without"
+    fi
+else
+    log_debug "DH parameters already exist"
 fi
 
 # Enable nginx site
