@@ -306,15 +306,45 @@ if [ ! -d "$CERT_DIR" ]; then
         --email $EMAIL \
         -d $DOMAIN \
         -d www.$DOMAIN \
-        --preferred-challenges http 2>&1 | tee -a "$LOG_FILE"; then
+        --preferred-challenges http \
+        --rsa-key-size 4096 \
+        --key-type rsa \
+        --expand 2>&1 | tee -a "$LOG_FILE"; then
         log_success "SSL certificate generated successfully!"
     else
         log_error "Failed to generate SSL certificate"
         exit 1
     fi
 else
-    log_success "SSL certificate already exists"
+    log_info "SSL certificate already exists - verifying and renewing if needed..."
+    # Force renewal check to ensure certificate is valid
+    if sudo certbot renew --dry-run --webroot --webroot-path=/var/www/certbot 2>&1 | tee -a "$LOG_FILE"; then
+        log_success "SSL certificate is valid"
+    else
+        log_warning "SSL certificate may need renewal - attempting renewal..."
+        if sudo certbot renew --webroot --webroot-path=/var/www/certbot --force-renewal 2>&1 | tee -a "$LOG_FILE"; then
+            log_success "SSL certificate renewed successfully"
+        else
+            log_warning "Certificate renewal had issues - may need manual intervention"
+        fi
+    fi
 fi
+
+# Verify certificate files exist and are readable
+log_info "Verifying SSL certificate files..."
+if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+    log_error "fullchain.pem not found - certificate may be incomplete"
+    exit 1
+fi
+if [ ! -f "/etc/letsencrypt/live/$DOMAIN/privkey.pem" ]; then
+    log_error "privkey.pem not found - certificate may be incomplete"
+    exit 1
+fi
+if [ ! -f "/etc/letsencrypt/live/$DOMAIN/chain.pem" ]; then
+    log_warning "chain.pem not found - creating symlink from fullchain.pem"
+    sudo ln -sf /etc/letsencrypt/live/$DOMAIN/fullchain.pem /etc/letsencrypt/live/$DOMAIN/chain.pem 2>&1 || log_warning "Could not create chain.pem symlink"
+fi
+log_success "SSL certificate files verified"
 
 # Ensure certbot renewal directory exists
 if [ ! -d "/var/www/certbot" ]; then
@@ -359,18 +389,34 @@ server {
 
     server_name $DOMAIN www.$DOMAIN;
 
-    # TLS Configuration
+    # TLS Configuration - Enhanced for better compatibility
     ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
     
-    # TLS 1.2 and 1.3 (wider compatibility)
+    # Modern TLS protocols (TLS 1.2 and 1.3)
     ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-    ssl_prefer_server_ciphers on;
+    
+    # Modern, secure cipher suites with wide compatibility
+    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384';
+    ssl_prefer_server_ciphers off;
+    
+    # SSL session configuration
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+    ssl_session_tickets off;
+    
+    # OCSP Stapling for better performance and security
+    ssl_stapling on;
+    ssl_stapling_verify on;
+    ssl_trusted_certificate /etc/letsencrypt/live/$DOMAIN/chain.pem;
+    resolver 8.8.8.8 8.8.4.4 valid=300s;
+    resolver_timeout 5s;
 
     # Security headers
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
 
     client_max_body_size 50M;
 
@@ -436,19 +482,35 @@ sudo rm -f /etc/nginx/sites-enabled/default
 log_info "Testing Nginx configuration..."
 if sudo nginx -t 2>&1 | tee -a "$LOG_FILE" | grep -q "successful"; then
     log_debug "Nginx configuration test passed"
-    if sudo systemctl restart nginx 2>&1 | tee -a "$LOG_FILE"; then
-        log_success "Nginx restarted successfully"
+    if sudo systemctl reload nginx 2>&1 | tee -a "$LOG_FILE"; then
+        log_success "Nginx reloaded successfully"
     else
-        log_error "Failed to restart Nginx"
-        exit 1
+        log_warning "Nginx reload failed, attempting restart..."
+        if sudo systemctl restart nginx 2>&1 | tee -a "$LOG_FILE"; then
+            log_success "Nginx restarted successfully"
+        else
+            log_error "Failed to restart Nginx"
+            exit 1
+        fi
     fi
 else
-    log_warning "Nginx configuration has issues, attempting graceful restart..."
-    if sudo systemctl restart nginx 2>&1 | tee -a "$LOG_FILE"; then
-        log_warning "Nginx restart attempted (may have SSL certificate issues)"
+    log_error "Nginx configuration test failed - check syntax errors above"
+    log_info "Attempting to view nginx error details..."
+    sudo nginx -t 2>&1 | tee -a "$LOG_FILE"
+    exit 1
+fi
+
+# Verify SSL certificate is working
+log_info "Verifying SSL certificate is accessible..."
+if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+    CERT_EXPIRY=$(sudo openssl x509 -enddate -noout -in /etc/letsencrypt/live/$DOMAIN/fullchain.pem 2>/dev/null | cut -d= -f2)
+    if [ -n "$CERT_EXPIRY" ]; then
+        log_success "SSL certificate expires: $CERT_EXPIRY"
     else
-        log_warning "Nginx restart had issues - SSL certificates may need to be configured"
+        log_warning "Could not read certificate expiry date"
     fi
+else
+    log_error "SSL certificate file not found - certificate may not be properly configured"
 fi
 
 # Create/update systemd services for frontend and backend
