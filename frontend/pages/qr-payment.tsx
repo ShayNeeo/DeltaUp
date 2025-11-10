@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useRouter } from 'next/router'
+import Image from 'next/image'
 import axios from 'axios'
 import QRCode from 'qrcode'
 
@@ -201,7 +202,14 @@ export default function QRPayment() {
                   <div className="mt-8 flex flex-col items-center p-8 bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-2xl border-2 border-dashed border-slate-300">
                     <p className="text-slate-700 mb-6 font-semibold text-base">Scan this QR code to pay:</p>
                     <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-lg">
-                      <img src={qrDataUrl} alt="QR Code" className="w-72 h-72" />
+                      <Image 
+                        src={qrDataUrl} 
+                        alt="QR Code" 
+                        width={288} 
+                        height={288}
+                        className="w-72 h-72"
+                        unoptimized
+                      />
                     </div>
                     <div className="mt-6 px-5 py-2.5 bg-white rounded-xl border border-slate-200">
                       <p className="text-sm font-medium text-slate-600">Amount</p>
