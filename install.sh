@@ -67,16 +67,29 @@ log_info "📍 Domain: $DOMAIN"
 log_info "📧 Email: $EMAIL"
 log_info "📁 Project Directory: $PROJECT_DIR"
 
-# Update system
-log_info "📦 Updating system packages..."
-if sudo apt-get update -qq 2>&1 | tee -a "$LOG_FILE"; then
-    log_debug "apt-get update completed"
-else
-    log_warning "apt-get update encountered issues"
+# Update system (skip if updated recently for faster reruns)
+NEED_UPDATE=false
+UPDATE_MARKER="/var/log/deltaup/.last_apt_update"
+if [ ! -f "$UPDATE_MARKER" ] || [ $(find "$UPDATE_MARKER" -mmin +720 2>/dev/null | wc -l) -gt 0 ]; then
+    NEED_UPDATE=true
 fi
 
+if [ "$NEED_UPDATE" = true ]; then
+    log_info "📦 Updating system packages..."
+    if sudo apt-get update -qq 2>&1 | tee -a "$LOG_FILE"; then
+        log_debug "apt-get update completed"
+        sudo touch "$UPDATE_MARKER" 2>/dev/null || true
+    else
+        log_warning "apt-get update encountered issues"
+    fi
+else
+    log_info "✓ Skipping apt update (updated recently - faster rerun)"
+fi
+
+# Install required packages (apt handles already-installed packages efficiently)
+log_info "📦 Ensuring required system packages are installed..."
 if sudo apt-get install -y -qq curl git nginx certbot python3-certbot-nginx build-essential pkg-config libssl-dev 2>&1 | tee -a "$LOG_FILE"; then
-    log_success "System packages installed"
+    log_success "System packages verified/installed"
 else
     log_error "Failed to install system packages"
     exit 1
@@ -147,9 +160,24 @@ if ! command -v npm &> /dev/null; then
     exit 1
 fi
 
-# Clean build to ensure fresh CSS generation
-log_info "🧹 Cleaning frontend build cache..."
-rm -rf .next node_modules package-lock.json 2>&1 >> "$LOG_FILE" || log_warning "Could not clean some files"
+# Smart clean - only clean if package.json changed or node_modules missing
+NEED_CLEAN=false
+if [ ! -d "node_modules" ]; then
+    NEED_CLEAN=true
+    log_info "node_modules missing - will perform clean install"
+elif [ "package.json" -nt "node_modules" ]; then
+    NEED_CLEAN=true
+    log_info "package.json updated - will refresh dependencies"
+fi
+
+if [ "$NEED_CLEAN" = true ]; then
+    log_info "🧹 Cleaning frontend build cache..."
+    rm -rf .next node_modules package-lock.json 2>&1 >> "$LOG_FILE" || log_warning "Could not clean some files"
+else
+    log_info "✓ Using cached node_modules (faster rerun)"
+    # Only clean .next for fresh build
+    rm -rf .next 2>&1 >> "$LOG_FILE" || log_warning "Could not clean .next"
+fi
 
 # Verify postcss.config.js has correct Tailwind v4 configuration
 log_info "🔍 Verifying PostCSS configuration for Tailwind v4..."
@@ -187,29 +215,33 @@ else
 fi
 
 # Install dependencies with correct environment for Tailwind v4
-log_info "📥 Installing npm dependencies..."
-if npm install --no-audit --no-fund 2>&1 | tee -a "$LOG_FILE"; then
-    :
-else
-    # Fallback to legacy-peer-deps if standard install fails
-    log_warning "Standard npm install failed, retrying with --legacy-peer-deps..."
-    if npm install --legacy-peer-deps --no-audit --no-fund 2>&1 | tee -a "$LOG_FILE"; then
+if [ "$NEED_CLEAN" = true ]; then
+    log_info "📥 Installing npm dependencies..."
+    if npm install --no-audit --no-fund 2>&1 | tee -a "$LOG_FILE"; then
         :
     else
-        log_error "❌ npm install failed with both standard and legacy modes"
+        # Fallback to legacy-peer-deps if standard install fails
+        log_warning "Standard npm install failed, retrying with --legacy-peer-deps..."
+        if npm install --legacy-peer-deps --no-audit --no-fund 2>&1 | tee -a "$LOG_FILE"; then
+            :
+        else
+            log_error "❌ npm install failed with both standard and legacy modes"
+            exit 1
+        fi
+    fi
+    
+    # Check if install actually succeeded by verifying node_modules was created
+    if [ ! -d "node_modules" ]; then
+        log_error "❌ npm install failed - node_modules directory not created"
+        log_info "npm version: $(npm --version)"
+        log_info "node version: $(node --version)"
         exit 1
     fi
+    
+    log_success "✓ Dependencies installed successfully"
+else
+    log_success "✓ Using cached dependencies (skipped npm install for speed)"
 fi
-
-# Check if install actually succeeded by verifying node_modules was created
-if [ ! -d "node_modules" ]; then
-    log_error "❌ npm install failed - node_modules directory not created"
-    log_info "npm version: $(npm --version)"
-    log_info "node version: $(node --version)"
-    exit 1
-fi
-
-log_success "✓ Dependencies installed successfully"
 
 # Verify key packages are installed
 if [ ! -d "node_modules/next" ]; then
@@ -294,6 +326,20 @@ else
     exit 1
 fi
 
+# Generate Diffie-Hellman parameters BEFORE nginx config (required for SSL)
+log_info "Generating DH parameters (this may take a minute)..."
+if [ ! -f /etc/ssl/certs/dhparam.pem ]; then
+    if sudo openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048 2>&1 | tee -a "$LOG_FILE"; then
+        log_success "DH parameters generated"
+    else
+        log_warning "DH parameter generation failed - will use default"
+        # Create empty file to prevent nginx errors
+        sudo touch /etc/ssl/certs/dhparam.pem 2>/dev/null || true
+    fi
+else
+    log_debug "DH parameters already exist"
+fi
+
 # Prepare certbot webroot directory BEFORE certificate request
 log_info "🔒 Preparing Let's Encrypt environment..."
 if [ ! -d "/var/www/certbot" ]; then
@@ -372,10 +418,20 @@ for cert_file in "fullchain.pem" "privkey.pem"; do
     log_debug "✓ $cert_file found"
 done
 
-# Create chain.pem symlink if needed
+# Create chain.pem if needed (required for OCSP stapling)
 if [ ! -f "/etc/letsencrypt/live/$DOMAIN/chain.pem" ]; then
-    log_debug "Creating chain.pem symlink"
-    sudo ln -sf /etc/letsencrypt/live/$DOMAIN/fullchain.pem /etc/letsencrypt/live/$DOMAIN/chain.pem 2>&1 || log_warning "Could not create chain.pem symlink"
+    log_debug "Creating chain.pem file"
+    # Extract intermediate cert from fullchain
+    if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+        sudo openssl storeutl -certs -noout -text /etc/letsencrypt/live/$DOMAIN/fullchain.pem 2>/dev/null | \
+            sudo tee /etc/letsencrypt/live/$DOMAIN/chain.pem > /dev/null || \
+            sudo ln -sf /etc/letsencrypt/live/$DOMAIN/fullchain.pem /etc/letsencrypt/live/$DOMAIN/chain.pem 2>&1
+        log_success "chain.pem created for OCSP stapling"
+    else
+        log_warning "Could not create chain.pem - OCSP stapling may not work"
+    fi
+else
+    log_debug "chain.pem already exists"
 fi
 
 log_success "✅ SSL certificate verification complete"
@@ -407,11 +463,15 @@ server {
     }
 }
 
-# HTTPS server block - IPv4 + IPv6
+# HTTPS server block - IPv4 + IPv6 with proper configuration
 server {
     listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen [::]:443 ssl http2 ipv6only=on;
     server_name $DOMAIN www.$DOMAIN;
+    
+    # Keepalive settings for better performance on WiFi
+    keepalive_timeout 65;
+    keepalive_requests 100;
 
     # SSL Certificate Configuration
     ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
@@ -419,21 +479,28 @@ server {
 
     # TLS Protocol Configuration - Secure for all networks
     ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_prefer_server_ciphers on;
+    ssl_prefer_server_ciphers off;
     
-    # Cipher suites - Compatible with WiFi networks
-    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384';
+    # Cipher suites - Broad compatibility for WiFi/Mobile networks
+    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:AES128-GCM-SHA256:AES256-GCM-SHA384';
 
     # SSL Session Configuration
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 10m;
+    ssl_session_cache shared:SSL:50m;
+    ssl_session_timeout 1d;
     ssl_session_tickets off;
 
     # Diffie-Hellman parameter
     ssl_dhparam /etc/ssl/certs/dhparam.pem;
 
-    # Security Headers
-    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+    # OCSP Stapling - improves SSL performance and reliability
+    ssl_stapling on;
+    ssl_stapling_verify on;
+    ssl_trusted_certificate /etc/letsencrypt/live/$DOMAIN/chain.pem;
+    resolver 8.8.8.8 8.8.4.4 1.1.1.1 valid=300s;
+    resolver_timeout 5s;
+
+    # Security Headers (relaxed HSTS for better WiFi compatibility)
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
@@ -441,6 +508,11 @@ server {
 
     # Client body size
     client_max_body_size 50M;
+    
+    # Buffer sizes optimized for WiFi/mobile networks
+    client_body_buffer_size 128k;
+    client_header_buffer_size 1k;
+    large_client_header_buffers 4 16k;
 
     # API proxy
     location /api/ {
@@ -452,9 +524,17 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header Connection "";
         proxy_redirect off;
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
+        
+        # Timeout settings optimized for WiFi
+        proxy_connect_timeout 90s;
+        proxy_send_timeout 90s;
+        proxy_read_timeout 90s;
+        
+        # Buffer settings for better WiFi performance
+        proxy_buffering on;
+        proxy_buffer_size 4k;
+        proxy_buffers 8 4k;
+        proxy_busy_buffers_size 8k;
     }
 
     # OAuth proxy
@@ -467,9 +547,17 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header Connection "";
         proxy_redirect off;
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
+        
+        # Timeout settings optimized for WiFi
+        proxy_connect_timeout 90s;
+        proxy_send_timeout 90s;
+        proxy_read_timeout 90s;
+        
+        # Buffer settings for better WiFi performance
+        proxy_buffering on;
+        proxy_buffer_size 4k;
+        proxy_buffers 8 4k;
+        proxy_busy_buffers_size 8k;
     }
 
     # Frontend proxy
@@ -487,11 +575,17 @@ server {
         proxy_set_header Connection "upgrade";
         
         proxy_redirect off;
-        proxy_buffering off;
-        proxy_request_buffering off;
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
+        
+        # Timeout settings optimized for WiFi
+        proxy_connect_timeout 90s;
+        proxy_send_timeout 90s;
+        proxy_read_timeout 90s;
+        
+        # Smart buffering for better WiFi performance
+        proxy_buffering on;
+        proxy_buffer_size 8k;
+        proxy_buffers 16 8k;
+        proxy_busy_buffers_size 16k;
     }
 }
 EOF
@@ -500,18 +594,6 @@ then
 else
     log_error "Failed to create Nginx configuration"
     exit 1
-fi
-
-# Generate Diffie-Hellman parameters for forward secrecy
-log_info "Generating DH parameters (this may take a minute)..."
-if [ ! -f /etc/ssl/certs/dhparam.pem ]; then
-    if sudo openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048 2>&1 | tee -a "$LOG_FILE"; then
-        log_success "DH parameters generated"
-    else
-        log_warning "DH parameter generation failed - continuing without"
-    fi
-else
-    log_debug "DH parameters already exist"
 fi
 
 # Enable nginx site
