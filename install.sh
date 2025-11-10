@@ -335,7 +335,7 @@ if sudo tee /etc/nginx/sites-available/$DOMAIN > /dev/null <<'EOF'
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
-    server_name __DOMAIN__ www.__DOMAIN__ _;
+    server_name __DOMAIN__ _;
 
     location /api/ {
         proxy_pass http://127.0.0.1:8000;
@@ -406,13 +406,12 @@ if sudo certbot --nginx \
     --non-interactive \
     --agree-tos \
     --email "$EMAIL" \
-    -d "$DOMAIN" \
-    -d "www.$DOMAIN" 2>&1 | tee -a "$LOG_FILE"; then
+    -d "$DOMAIN" 2>&1 | tee -a "$LOG_FILE"; then
     log_success "✅ SSL certificate obtained and nginx configured by Certbot"
     sudo systemctl reload nginx 2>&1 | tee -a "$LOG_FILE" || log_warning "Could not reload nginx after SSL"
 else
     log_warning "⚠️  Certbot failed - site will run HTTP only"
-    log_info "You can manually run: sudo certbot --nginx -d $DOMAIN -d www.$DOMAIN"
+    log_info "You can manually run: sudo certbot --nginx -d $DOMAIN"
 fi
 
 # Verify SSL certificate if it exists
