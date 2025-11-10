@@ -160,6 +160,12 @@ if ! command -v npm &> /dev/null; then
     exit 1
 fi
 
+# Verify we have a valid project structure
+if [ ! -f "package.json" ]; then
+    log_error "package.json not found in frontend directory"
+    exit 1
+fi
+
 # Smart clean - only clean if package.json changed or node_modules missing
 NEED_CLEAN=false
 if [ ! -d "node_modules" ]; then
@@ -302,6 +308,12 @@ fi
 log_info "🦀 Setting up Rust Backend..."
 cd "$PROJECT_DIR/backend"
 
+# Verify we have a valid project structure
+if [ ! -f "Cargo.toml" ]; then
+    log_error "Cargo.toml not found in backend directory"
+    exit 1
+fi
+
 # Source cargo environment
 if [ -f "$HOME/.cargo/env" ]; then
     source "$HOME/.cargo/env" 2>&1 >> "$LOG_FILE" || log_warning "Could not source cargo env"
@@ -432,6 +444,21 @@ log_info "📋 Setting up systemd services..."
 # Backend service (always overwrite to ensure correct configuration)
 log_debug "Creating/updating backend systemd service"
 BACKEND_USER=$(whoami)
+
+# Check if JWT_SECRET already exists in old service to preserve it
+JWT_SECRET=""
+if [ -f /etc/systemd/system/deltaup-backend.service ]; then
+    JWT_SECRET=$(sudo grep '^Environment="JWT_SECRET=' /etc/systemd/system/deltaup-backend.service | cut -d'=' -f2 | tr -d '"' || echo "")
+fi
+
+# Use existing JWT_SECRET or generate new one
+if [ -z "$JWT_SECRET" ]; then
+    JWT_SECRET=$(openssl rand -base64 32)
+    log_info "Generated new JWT_SECRET"
+else
+    log_info "Preserving existing JWT_SECRET"
+fi
+
 sudo rm -f /etc/systemd/system/deltaup-backend.service
 if sudo tee /etc/systemd/system/deltaup-backend.service > /dev/null <<EOF
 [Unit]
@@ -443,13 +470,17 @@ Type=simple
 User=$BACKEND_USER
 WorkingDirectory=$PROJECT_DIR/backend
 Environment="DATABASE_URL=sqlite://$PROJECT_DIR/backend/fintech.db"
-Environment="JWT_SECRET=$(openssl rand -base64 32)"
+Environment="JWT_SECRET=$JWT_SECRET"
 Environment="RUST_LOG=info"
 ExecStart=$BACKEND_BINARY
 Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
+# Production reliability settings
+RestartForceExitStatus=0
+StartLimitInterval=60s
+StartLimitBurst=3
 
 [Install]
 WantedBy=multi-user.target
@@ -500,16 +531,36 @@ else
     exit 1
 fi
 
-# Restart frontend service to pick up the new build
-log_info "Restarting frontend service..."
-if sudo systemctl restart deltaup-frontend 2>&1 | tee -a "$LOG_FILE"; then
-    log_success "Frontend service restarted"
-    sleep 2
-    log_info "Checking frontend service status..."
-    sudo systemctl status deltaup-frontend 2>&1 | head -5 | tee -a "$LOG_FILE"
+# Enable services to start on boot
+log_info "Enabling services on boot..."
+sudo systemctl enable deltaup-backend 2>&1 >> "$LOG_FILE" || log_warning "Could not enable backend service on boot"
+sudo systemctl enable deltaup-frontend 2>&1 >> "$LOG_FILE" || log_warning "Could not enable frontend service on boot"
+
+# Start/restart services
+log_info "Starting/restarting services..."
+if sudo systemctl is-active --quiet deltaup-backend; then
+    log_info "Backend already running - restarting..."
+    sudo systemctl restart deltaup-backend 2>&1 | tee -a "$LOG_FILE" || log_warning "Could not restart backend"
 else
-    log_warning "Failed to restart frontend service - may need manual restart"
+    log_info "Starting backend service..."
+    sudo systemctl start deltaup-backend 2>&1 | tee -a "$LOG_FILE" || log_warning "Could not start backend"
 fi
+
+sleep 2
+
+if sudo systemctl is-active --quiet deltaup-frontend; then
+    log_info "Frontend already running - restarting..."
+    sudo systemctl restart deltaup-frontend 2>&1 | tee -a "$LOG_FILE" || log_warning "Could not restart frontend"
+else
+    log_info "Starting frontend service..."
+    sudo systemctl start deltaup-frontend 2>&1 | tee -a "$LOG_FILE" || log_warning "Could not start frontend"
+fi
+
+sleep 2
+
+log_info "Service status check..."
+sudo systemctl status deltaup-backend --no-pager 2>&1 | head -5 | tee -a "$LOG_FILE" || log_warning "Backend status check failed"
+sudo systemctl status deltaup-frontend --no-pager 2>&1 | head -5 | tee -a "$LOG_FILE" || log_warning "Frontend status check failed"
 
 # Certbot handles auto-renewal automatically via systemd timer
 # Check if certbot timer is enabled
