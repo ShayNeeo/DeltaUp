@@ -11,7 +11,7 @@ export default function Layout({ children }: LayoutProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   const navItems = [
-    { href: '/', label: 'Dashboard', icon: '📊' },
+    { href: '/', label: 'Home', icon: '📊' },
     { href: '/balance', label: 'Balance', icon: '💰' },
     { href: '/transfer', label: 'Transfer', icon: '💸' },
     { href: '/qr-payment', label: 'QR Payment', icon: '📱' },
