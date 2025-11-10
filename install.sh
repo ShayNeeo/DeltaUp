@@ -326,271 +326,47 @@ else
     exit 1
 fi
 
-# Generate Diffie-Hellman parameters BEFORE nginx config (required for SSL)
-log_info "Generating DH parameters (this may take a minute)..."
-if [ ! -f /etc/ssl/certs/dhparam.pem ]; then
-    if sudo openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048 2>&1 | tee -a "$LOG_FILE"; then
-        log_success "DH parameters generated"
-    else
-        log_warning "DH parameter generation failed - will use default"
-        # Create empty file to prevent nginx errors
-        sudo touch /etc/ssl/certs/dhparam.pem 2>/dev/null || true
-    fi
-else
-    log_debug "DH parameters already exist"
-fi
+# Let Certbot handle all SSL configuration automatically
+# (including DH params, ciphers, etc)
 
-# Prepare certbot webroot directory BEFORE certificate request
-log_info "🔒 Preparing Let's Encrypt environment..."
-if [ ! -d "/var/www/certbot" ]; then
-    log_debug "Creating certbot webroot directory"
-    sudo mkdir -p /var/www/certbot
-    sudo chmod 755 /var/www/certbot
-    log_success "Certbot webroot directory created"
-fi
-
-# Create temporary nginx config for ACME challenge validation
-log_debug "Setting up temporary ACME challenge handler..."
-if sudo tee /etc/nginx/sites-available/$DOMAIN > /dev/null <<'NGINX_TEMP'
-server {
-    listen 80;
-    listen [::]:80;
-    server_name $DOMAIN www.$DOMAIN;
-    
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-        try_files $uri =404;
-    }
-    
-    location / {
-        return 200 "Setup in progress...";
-    }
-}
-NGINX_TEMP
-then
-    sudo sed -i "s/\\\$DOMAIN/$DOMAIN/g" /etc/nginx/sites-available/$DOMAIN
-    sudo ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/$DOMAIN 2>/dev/null || true
-    sudo systemctl reload nginx 2>&1 >> "$LOG_FILE" || log_warning "Could not reload nginx"
-    sleep 2
-    log_debug "Temporary ACME handler ready"
-else
-    log_warning "Could not setup temporary ACME handler"
-fi
-
-# Create SSL certificates with Let's Encrypt
-log_info "🔒 Requesting SSL Certificate from Let's Encrypt..."
-CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
-
-if [ ! -d "$CERT_DIR" ]; then
-    log_info "Generating new SSL certificate for $DOMAIN..."
-    if sudo certbot certonly --webroot \
-        --webroot-path=/var/www/certbot \
-        --non-interactive \
-        --agree-tos \
-        --email "$EMAIL" \
-        -d "$DOMAIN" \
-        -d "www.$DOMAIN" \
-        --preferred-challenges http \
-        --rsa-key-size 4096 \
-        --key-type rsa \
-        --expand 2>&1 | tee -a "$LOG_FILE"; then
-        log_success "✅ SSL certificate generated successfully!"
-    else
-        log_error "❌ Failed to generate SSL certificate - check logs above"
-        sudo certbot certificates 2>&1 | tee -a "$LOG_FILE"
-        exit 1
-    fi
-else
-    log_info "SSL certificate already exists at $CERT_DIR"
-    log_info "Certificate validity:"
-    sudo openssl x509 -in "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" -noout -dates 2>&1 | tee -a "$LOG_FILE"
-fi
-
-# Verify certificate files exist and are readable
-log_info "✓ Verifying SSL certificate files..."
-for cert_file in "fullchain.pem" "privkey.pem"; do
-    if [ ! -f "/etc/letsencrypt/live/$DOMAIN/$cert_file" ]; then
-        log_error "❌ $cert_file not found at /etc/letsencrypt/live/$DOMAIN/"
-        log_info "Available certificates:"
-        sudo certbot certificates 2>&1 | tee -a "$LOG_FILE"
-        exit 1
-    fi
-    log_debug "✓ $cert_file found"
-done
-
-# Create chain.pem if needed (required for OCSP stapling)
-if [ ! -f "/etc/letsencrypt/live/$DOMAIN/chain.pem" ]; then
-    log_debug "Creating chain.pem file"
-    # Extract intermediate cert from fullchain
-    if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
-        sudo openssl storeutl -certs -noout -text /etc/letsencrypt/live/$DOMAIN/fullchain.pem 2>/dev/null | \
-            sudo tee /etc/letsencrypt/live/$DOMAIN/chain.pem > /dev/null || \
-            sudo ln -sf /etc/letsencrypt/live/$DOMAIN/fullchain.pem /etc/letsencrypt/live/$DOMAIN/chain.pem 2>&1
-        log_success "chain.pem created for OCSP stapling"
-    else
-        log_warning "Could not create chain.pem - OCSP stapling may not work"
-    fi
-else
-    log_debug "chain.pem already exists"
-fi
-
-log_success "✅ SSL certificate verification complete"
-
-# Setup Nginx configuration
-log_info "🌐 Configuring Nginx reverse proxy..."
-if sudo tee /etc/nginx/sites-available/$DOMAIN > /dev/null <<EOF
-upstream deltaup_backend {
-    server 127.0.0.1:8000 fail_timeout=0;
-}
-
-upstream deltaup_frontend {
-    server 127.0.0.1:3000 fail_timeout=0;
-}
-
-# HTTP server - handle certbot renewal and redirect to HTTPS
+# Setup Simple Nginx configuration (Let Certbot handle SSL)
+log_info "🌐 Configuring Nginx reverse proxy (simple config)..."
+if sudo tee /etc/nginx/sites-available/$DOMAIN > /dev/null <<'EOF'
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
-    server_name $DOMAIN www.$DOMAIN;
+    server_name __DOMAIN__ www.__DOMAIN__ _;
 
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-        try_files \$uri =404;
-    }
-
-    location / {
-        return 301 https://\$server_name\$request_uri;
-    }
-}
-
-# HTTPS server block - IPv4 + IPv6 with proper configuration
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2 ipv6only=on;
-    server_name $DOMAIN www.$DOMAIN;
-    
-    # Keepalive settings for better performance on WiFi
-    keepalive_timeout 65;
-    keepalive_requests 100;
-
-    # SSL Certificate Configuration
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-
-    # TLS Protocol Configuration - Secure for all networks
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_prefer_server_ciphers off;
-    
-    # Cipher suites - Broad compatibility for WiFi/Mobile networks
-    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:AES128-GCM-SHA256:AES256-GCM-SHA384';
-
-    # SSL Session Configuration
-    ssl_session_cache shared:SSL:50m;
-    ssl_session_timeout 1d;
-    ssl_session_tickets off;
-
-    # Diffie-Hellman parameter
-    ssl_dhparam /etc/ssl/certs/dhparam.pem;
-
-    # OCSP Stapling - improves SSL performance and reliability
-    ssl_stapling on;
-    ssl_stapling_verify on;
-    ssl_trusted_certificate /etc/letsencrypt/live/$DOMAIN/chain.pem;
-    resolver 8.8.8.8 8.8.4.4 1.1.1.1 valid=300s;
-    resolver_timeout 5s;
-
-    # Security Headers (relaxed HSTS for better WiFi compatibility)
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header Referrer-Policy "no-referrer-when-downgrade" always;
-
-    # Client body size
-    client_max_body_size 50M;
-    
-    # Buffer sizes optimized for WiFi/mobile networks
-    client_body_buffer_size 128k;
-    client_header_buffer_size 1k;
-    large_client_header_buffers 4 16k;
-
-    # API proxy
     location /api/ {
-        proxy_pass http://deltaup_backend;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header Connection "";
-        proxy_redirect off;
-        
-        # Timeout settings optimized for WiFi
-        proxy_connect_timeout 90s;
-        proxy_send_timeout 90s;
-        proxy_read_timeout 90s;
-        
-        # Buffer settings for better WiFi performance
-        proxy_buffering on;
-        proxy_buffer_size 4k;
-        proxy_buffers 8 4k;
-        proxy_busy_buffers_size 8k;
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # OAuth proxy
     location /oauth/ {
-        proxy_pass http://deltaup_backend;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header Connection "";
-        proxy_redirect off;
-        
-        # Timeout settings optimized for WiFi
-        proxy_connect_timeout 90s;
-        proxy_send_timeout 90s;
-        proxy_read_timeout 90s;
-        
-        # Buffer settings for better WiFi performance
-        proxy_buffering on;
-        proxy_buffer_size 4k;
-        proxy_buffers 8 4k;
-        proxy_busy_buffers_size 8k;
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Frontend proxy
     location / {
-        proxy_pass http://deltaup_frontend;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header X-Forwarded-Host \$server_name;
-        
-        # WebSocket support
-        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
-        
-        proxy_redirect off;
-        
-        # Timeout settings optimized for WiFi
-        proxy_connect_timeout 90s;
-        proxy_send_timeout 90s;
-        proxy_read_timeout 90s;
-        
-        # Smart buffering for better WiFi performance
-        proxy_buffering on;
-        proxy_buffer_size 8k;
-        proxy_buffers 16 8k;
-        proxy_busy_buffers_size 16k;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 EOF
 then
-    log_success "Nginx configuration created"
+    sudo sed -i "s/__DOMAIN__/$DOMAIN/g" /etc/nginx/sites-available/$DOMAIN
+    log_success "Simple nginx configuration created"
 else
     log_error "Failed to create Nginx configuration"
     exit 1
@@ -623,8 +399,23 @@ else
     exit 1
 fi
 
-# Verify SSL certificate is working
-log_info "Verifying SSL certificate is accessible..."
+# Let Certbot configure SSL automatically (this modifies nginx config)
+log_info "🔒 Obtaining Let's Encrypt SSL certificate with Certbot..."
+if sudo certbot --nginx \
+    --redirect \
+    --non-interactive \
+    --agree-tos \
+    --email "$EMAIL" \
+    -d "$DOMAIN" \
+    -d "www.$DOMAIN" 2>&1 | tee -a "$LOG_FILE"; then
+    log_success "✅ SSL certificate obtained and nginx configured by Certbot"
+    sudo systemctl reload nginx 2>&1 | tee -a "$LOG_FILE" || log_warning "Could not reload nginx after SSL"
+else
+    log_warning "⚠️  Certbot failed - site will run HTTP only"
+    log_info "You can manually run: sudo certbot --nginx -d $DOMAIN -d www.$DOMAIN"
+fi
+
+# Verify SSL certificate if it exists
 if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
     CERT_EXPIRY=$(sudo openssl x509 -enddate -noout -in /etc/letsencrypt/live/$DOMAIN/fullchain.pem 2>/dev/null | cut -d= -f2)
     if [ -n "$CERT_EXPIRY" ]; then
@@ -633,7 +424,7 @@ if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
         log_warning "Could not read certificate expiry date"
     fi
 else
-    log_error "SSL certificate file not found - certificate may not be properly configured"
+    log_info "No SSL certificate found - site running on HTTP only"
 fi
 
 # Create/update systemd services for frontend and backend
@@ -687,7 +478,7 @@ WorkingDirectory=$PROJECT_DIR/frontend
 Environment="NODE_ENV=production"
 Environment="NEXT_PUBLIC_API_URL=https://$DOMAIN"
 Environment="PORT=3000"
-ExecStart=/usr/bin/npm start
+ExecStart=$PROJECT_DIR/frontend/node_modules/.bin/next start --port 3000 --hostname 0.0.0.0
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -721,29 +512,20 @@ else
     log_warning "Failed to restart frontend service - may need manual restart"
 fi
 
-# Setup auto-renewal for SSL certificates (skip if already configured)
-if [ -f "/etc/cron.d/certbot-renew" ]; then
-    log_info "⚙️  Skipping SSL renewal setup - already configured"
+# Certbot handles auto-renewal automatically via systemd timer
+# Check if certbot timer is enabled
+log_info "⚙️ Ensuring certbot auto-renewal is enabled..."
+if sudo systemctl is-enabled certbot.timer &>/dev/null; then
+    log_success "Certbot auto-renewal already enabled"
 else
-    log_info "⚙️ Setting up automatic SSL certificate renewal..."
-    if sudo tee /etc/cron.d/certbot-renew > /dev/null <<'EOF'
-# Auto-renew Let's Encrypt certificates using webroot method
-# Runs daily at 2:30 AM to avoid peak traffic times
-
-# Primary renewal attempt
-30 2 * * * root certbot renew --webroot --webroot-path=/var/www/certbot --quiet >> /var/log/deltaup/certbot-renew.log 2>&1 && systemctl reload nginx >> /var/log/deltaup/certbot-renew.log 2>&1 || true
-
-# Backup renewal attempt at 14:30 (2:30 PM) in case of failures
-30 14 * * * root certbot renew --webroot --webroot-path=/var/www/certbot --quiet >> /var/log/deltaup/certbot-renew.log 2>&1 || true
-
-# Weekly certificate status check (Monday at 3:00 AM)
-0 3 * * 1 root certbot certificates >> /var/log/deltaup/certbot-renew.log 2>&1
-EOF
-    then
-        log_success "SSL auto-renewal cron jobs configured"
+    if sudo systemctl enable certbot.timer 2>&1 | tee -a "$LOG_FILE"; then
+        if sudo systemctl start certbot.timer 2>&1 | tee -a "$LOG_FILE"; then
+            log_success "Certbot auto-renewal timer enabled"
+        else
+            log_warning "Could not start certbot timer"
+        fi
     else
-        log_error "Failed to configure SSL auto-renewal"
-        exit 1
+        log_warning "Could not enable certbot timer - manual renewal may be needed"
     fi
 fi
 
