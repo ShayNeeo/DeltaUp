@@ -87,7 +87,7 @@ pub async fn register(req: web::Json<RegisterRequest>) -> impl Responder {
         username: req.username.clone(),
         email: req.email.clone(),
         account_number: account_number.clone(),
-        balance: 0.0,
+        balance: 1000.0, // Default balance: 1000 USD
     };
 
     HttpResponse::Ok().json(AuthResponse { token, user })

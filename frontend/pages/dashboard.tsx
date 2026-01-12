@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
-import axios from 'axios'
+import { authAPI, transactionAPI } from '@/lib/api'
 
 interface User {
     username: string
@@ -39,12 +39,10 @@ export default function Dashboard() {
 
     const fetchUserData = async () => {
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-            const token = localStorage.getItem('token')
-            const response = await axios.get(`${apiUrl}/api/user/profile`, {
-                headers: { Authorization: `Bearer ${token}` }
-            })
-            setUser(response.data)
+            const response = await authAPI.getProfile()
+            setUser(response)
+            // Update localStorage with fresh data
+            localStorage.setItem('user', JSON.stringify(response))
         } catch (err) {
             console.error('Failed to fetch user data:', err)
             router.push('/login')
@@ -55,12 +53,8 @@ export default function Dashboard() {
 
     const fetchTransactions = async () => {
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-            const token = localStorage.getItem('token')
-            const response = await axios.get(`${apiUrl}/api/transactions`, {
-                headers: { Authorization: `Bearer ${token}` }
-            })
-            setTransactions(response.data.slice(0, 5))
+            const response = await transactionAPI.getTransactions()
+            setTransactions(Array.isArray(response) ? response.slice(0, 5) : [])
         } catch (err) {
             console.error('Failed to fetch transactions:', err)
         }
@@ -160,8 +154,8 @@ export default function Dashboard() {
                                             </p>
                                             <span
                                                 className={`text-xs px-2 py-1 rounded-full ${tx.status === 'completed'
-                                                        ? 'bg-green-500/20 text-green-300'
-                                                        : 'bg-yellow-500/20 text-yellow-300'
+                                                    ? 'bg-green-500/20 text-green-300'
+                                                    : 'bg-yellow-500/20 text-yellow-300'
                                                     }`}
                                             >
                                                 {tx.status}

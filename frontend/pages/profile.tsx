@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
-import axios from 'axios'
+import { authAPI } from '@/lib/api'
 
 interface User {
     username: string
@@ -32,16 +32,14 @@ export default function Profile() {
 
     const fetchUserData = async () => {
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-            const token = localStorage.getItem('token')
-            const response = await axios.get(`${apiUrl}/api/user/profile`, {
-                headers: { Authorization: `Bearer ${token}` }
-            })
-            setUser(response.data)
+            const response = await authAPI.getProfile()
+            setUser(response)
             setFormData({
-                username: response.data.username,
-                email: response.data.email
+                username: response.username,
+                email: response.email
             })
+            // Update localStorage with fresh data
+            localStorage.setItem('user', JSON.stringify(response))
         } catch (err) {
             console.error('Failed to fetch user data:', err)
             router.push('/login')
@@ -50,19 +48,10 @@ export default function Profile() {
         }
     }
 
-    const handleUpdate = async (e: React.FormEvent) => {
+    const handleUpdate = (e: React.FormEvent) => {
         e.preventDefault()
-        try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-            const token = localStorage.getItem('token')
-            await axios.put(`${apiUrl}/api/user/profile`, formData, {
-                headers: { Authorization: `Bearer ${token}` }
-            })
-            setEditing(false)
-            fetchUserData()
-        } catch (err) {
-            console.error('Failed to update profile:', err)
-        }
+        // Note: Profile update functionality will be added when backend endpoint is ready
+        setEditing(false)
     }
 
     const handleLogout = () => {

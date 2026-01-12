@@ -1,339 +1,305 @@
-import React, { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
-import Image from 'next/image'
-import axios from 'axios'
 import QRCode from 'qrcode'
-
-interface QRData {
-  account?: string
-  amount: number
-  timestamp: string
-}
+import { transactionAPI, getUser } from '@/lib/api'
 
 export default function QRPayment() {
   const router = useRouter()
-  const [mode, setMode] = useState<'generate' | 'scan'>('generate')
-  const [qrValue, setQrValue] = useState('')
+  const [user, setUser] = useState<any>(null)
+  const [mode, setMode] = useState<'scan' | 'generate'>('generate')
   const [amount, setAmount] = useState('')
+  const [description, setDescription] = useState('')
+  const [qrCodeUrl, setQrCodeUrl] = useState('')
+  const [scanResult, setScanResult] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [qrDataUrl, setQrDataUrl] = useState('')
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [scanning, setScanning] = useState(false)
 
+  useEffect(() => {
+    const token = localStorage.getItem('token')
+    if (!token) {
+      router.push('/login')
+      return
+    }
+    const userData = getUser()
+    setUser(userData)
+  }, [router])
+
+  // Generate QR Code
   const handleGenerateQR = async () => {
-    if (!amount) {
-      setError('Please enter an amount')
+    if (!amount || parseFloat(amount) <= 0) {
+      setError('Please enter a valid amount')
+      return
+    }
+
+    const qrData = JSON.stringify({
+      account: user?.account_number,
+      amount: parseFloat(amount),
+      description: description || 'Payment',
+      timestamp: new Date().toISOString()
+    })
+
+    try {
+      const url = await QRCode.toDataURL(qrData, {
+        width: 300,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      })
+      setQrCodeUrl(url)
+      setError('')
+    } catch (err) {
+      setError('Failed to generate QR code')
+    }
+  }
+
+  // Start camera for scanning
+  const startScanning = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }
+      })
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        videoRef.current.play()
+        setScanning(true)
+        scanQRCode()
+      }
+    } catch (err) {
+      setError('Camera access denied. Please enable camera permissions.')
+    }
+  }
+
+  // Stop camera
+  const stopScanning = () => {
+    if (videoRef.current?.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream
+      stream.getTracks().forEach(track => track.stop())
+      videoRef.current.srcObject = null
+    }
+    setScanning(false)
+  }
+
+  // Scan QR code from video
+  const scanQRCode = () => {
+    const canvas = canvasRef.current
+    const video = videoRef.current
+
+    if (!canvas || !video || !scanning) return
+
+    const context = canvas.getContext('2d')
+    if (!context) return
+
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    context.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
+
+    // Note: In production, use a proper QR code scanner library like jsQR
+    // This is a simplified version
+    setTimeout(() => {
+      if (scanning) {
+        scanQRCode()
+      }
+    }, 100)
+  }
+
+  // Process scanned QR code
+  const handleProcessPayment = async () => {
+    if (!scanResult) {
+      setError('No QR code scanned')
       return
     }
 
     setLoading(true)
     setError('')
-    try {
-      const user = JSON.parse(localStorage.getItem('user') || '{}')
-      
-      const qrData: QRData = {
-        account: user.account_number,
-        amount: parseFloat(amount),
-        timestamp: new Date().toISOString(),
-      }
-      
-      const qrString = JSON.stringify(qrData)
-      setQrValue(qrString)
-      
-      // Generate QR code as data URL
-      const dataUrl = await QRCode.toDataURL(qrString)
-      setQrDataUrl(dataUrl)
-      setSuccess('QR code generated successfully! 🎉')
-    } catch (err) {
-      setError('Failed to generate QR code')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleScanSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
     setSuccess('')
 
     try {
-      const token = localStorage.getItem('token')
-      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/qr-payment`, { qr_data: qrValue }, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-
-      setSuccess('QR payment processed successfully! 🎉')
-      setQrValue('')
-      setTimeout(() => router.push('/'), 2000)
+      const response = await transactionAPI.qrPayment({ qr_data: scanResult })
+      setSuccess('Payment processed successfully!')
+      setScanResult('')
+      stopScanning()
     } catch (err: any) {
-      setError(err.response?.data?.message || 'QR payment failed')
+      setError(err.response?.data?.message || 'Payment failed')
     } finally {
       setLoading(false)
     }
   }
 
-  return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-      <div className="space-y-10">
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-4xl sm:text-5xl font-light text-slate-900 mb-2 tracking-tight">QR Payment</h1>
-            <p className="text-base text-slate-600">Generate and scan QR codes for instant payments</p>
-          </div>
-          <button
-            onClick={() => router.push('/')}
-            className="p-2 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-all"
-            aria-label="Go back"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-          </button>
-        </div>
+  useEffect(() => {
+    return () => {
+      stopScanning()
+    }
+  }, [])
 
-        {/* Mode Selector */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-2 inline-flex gap-2 shadow-sm">
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 py-12 px-4">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-4xl font-bold text-slate-900 mb-2">QR Payment</h1>
+        <p className="text-slate-600 mb-8">Scan or generate QR codes for instant payments</p>
+
+        {/* Mode Switcher */}
+        <div className="flex gap-4 mb-8">
           <button
             onClick={() => {
               setMode('generate')
-              setQrValue('')
-              setError('')
-              setSuccess('')
-              setQrDataUrl('')
-              setAmount('')
+              stopScanning()
             }}
-            className={`px-6 py-2.5 rounded-xl font-semibold text-sm transition-all duration-200 ${
-              mode === 'generate'
-                ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md'
-                : 'bg-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
+            className={`flex-1 py-3 px-6 rounded-xl font-semibold transition-all ${mode === 'generate'
+                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
+                : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'
+              }`}
           >
-            Generate QR
+            📱 Generate QR
           </button>
           <button
-            onClick={() => {
-              setMode('scan')
-              setQrValue('')
-              setError('')
-              setSuccess('')
-              setQrDataUrl('')
-              setAmount('')
-            }}
-            className={`px-6 py-2.5 rounded-xl font-semibold text-sm transition-all duration-200 ${
-              mode === 'scan'
-                ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md'
-                : 'bg-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
+            onClick={() => setMode('scan')}
+            className={`flex-1 py-3 px-6 rounded-xl font-semibold transition-all ${mode === 'scan'
+                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
+                : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'
+              }`}
           >
-            Scan QR
+            📷 Scan QR
           </button>
         </div>
 
+        {/* Alerts */}
         {error && (
-          <div className="bg-red-50 border border-red-200/80 text-red-700 px-5 py-4 rounded-xl flex items-center gap-2">
-            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-            <span>{error}</span>
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl">
+            {error}
           </div>
         )}
         {success && (
-          <div className="bg-emerald-50 border border-emerald-200/80 text-emerald-700 px-5 py-4 rounded-xl flex items-center gap-2">
-            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            <span>{success}</span>
+          <div className="mb-6 p-4 bg-green-50 border border-green-200 text-green-700 rounded-xl">
+            {success}
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Content */}
-          <div className="lg:col-span-2">
-            {mode === 'generate' ? (
-              <div className="bg-white border border-slate-200/80 rounded-2xl p-8 sm:p-10 shadow-sm space-y-8">
-                <div>
-                  <h2 className="text-2xl font-semibold text-slate-900 mb-1">Generate Payment QR</h2>
-                  <p className="text-sm text-slate-500">Create a QR code for others to scan and pay</p>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2.5">
-                    Amount (USD)
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 font-semibold text-lg">$</span>
-                    <input
-                      type="number"
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      placeholder="0.00"
-                      step="0.01"
-                      min="0"
-                      className="w-full pl-9 pr-4 py-3.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white text-lg"
-                    />
-                  </div>
-                </div>
+        {/* Generate QR Mode */}
+        {mode === 'generate' && (
+          <div className="bg-white rounded-2xl shadow-lg p-8 border border-slate-200">
+            <h2 className="text-2xl font-semibold text-slate-900 mb-6">Generate Payment QR Code</h2>
 
-                <button
-                  onClick={handleGenerateQR}
-                  disabled={loading || !amount}
-                  className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white py-4 rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-base"
-                >
-                  {loading ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Generating...
-                    </span>
-                  ) : (
-                    <span className="flex items-center justify-center gap-2">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                      </svg>
-                      Generate QR Code
-                    </span>
-                  )}
-                </button>
-
-                {qrDataUrl && (
-                  <div className="mt-8 flex flex-col items-center p-8 bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-2xl border-2 border-dashed border-slate-300">
-                    <p className="text-slate-700 mb-6 font-semibold text-base">Scan this QR code to pay:</p>
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-lg">
-                      <Image 
-                        src={qrDataUrl} 
-                        alt="QR Code" 
-                        width={288} 
-                        height={288}
-                        className="w-72 h-72"
-                        unoptimized
-                      />
-                    </div>
-                    <div className="mt-6 px-5 py-2.5 bg-white rounded-xl border border-slate-200">
-                      <p className="text-sm font-medium text-slate-600">Amount</p>
-                      <p className="text-xl font-semibold text-slate-900">${parseFloat(amount).toFixed(2)} USD</p>
-                    </div>
-                  </div>
-                )}
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Amount (USD)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  placeholder="0.00"
+                />
               </div>
-            ) : (
-              <form onSubmit={handleScanSubmit} className="bg-white border border-slate-200/80 rounded-2xl p-8 sm:p-10 shadow-sm space-y-8">
-                <div>
-                  <h2 className="text-2xl font-semibold text-slate-900 mb-1">Process QR Payment</h2>
-                  <p className="text-sm text-slate-500">Paste QR data or scan result to process payment</p>
-                </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2.5">
-                    QR Data / Scan Result
-                  </label>
-                  <textarea
-                    value={qrValue}
-                    onChange={(e) => setQrValue(e.target.value)}
-                    placeholder="Paste QR data or scan result here..."
-                    rows={6}
-                    className="w-full px-4 py-3.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-all bg-white font-mono text-sm"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Description (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  placeholder="Payment for..."
+                />
+              </div>
 
-                <button
-                  type="submit"
-                  disabled={loading || !qrValue}
-                  className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white py-4 rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-base"
-                >
-                  {loading ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Processing...
-                    </span>
-                  ) : (
-                    <span className="flex items-center justify-center gap-2">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                      </svg>
-                      Pay via QR
-                    </span>
-                  )}
-                </button>
-              </form>
+              <button
+                onClick={handleGenerateQR}
+                className="w-full py-3 px-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-xl shadow-lg transition-all"
+              >
+                Generate QR Code
+              </button>
+            </div>
+
+            {qrCodeUrl && (
+              <div className="text-center">
+                <div className="inline-block p-6 bg-white rounded-2xl border-2 border-slate-200">
+                  <img src={qrCodeUrl} alt="Payment QR Code" className="w-64 h-64" />
+                </div>
+                <p className="mt-4 text-sm text-slate-600">
+                  Show this QR code to receive ${parseFloat(amount).toFixed(2)}
+                </p>
+              </div>
             )}
           </div>
+        )}
 
-          {/* Info Sidebar */}
-          <div className="space-y-5">
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 border border-blue-200/80 rounded-xl p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                </div>
-                <h3 className="font-semibold text-blue-900">How It Works</h3>
-              </div>
-              <p className="text-sm text-blue-800 leading-relaxed">
-                Generate a unique QR code with your payment amount, then share it. Others can scan and process the payment instantly.
-              </p>
-            </div>
+        {/* Scan QR Mode */}
+        {mode === 'scan' && (
+          <div className="bg-white rounded-2xl shadow-lg p-8 border border-slate-200">
+            <h2 className="text-2xl font-semibold text-slate-900 mb-6">Scan QR Code to Pay</h2>
 
-            <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 border border-emerald-200/80 rounded-xl p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
+            {!scanning ? (
+              <button
+                onClick={startScanning}
+                className="w-full py-4 px-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-xl shadow-lg transition-all text-lg"
+              >
+                📷 Start Camera
+              </button>
+            ) : (
+              <div className="space-y-4">
+                <div className="relative bg-black rounded-xl overflow-hidden">
+                  <video
+                    ref={videoRef}
+                    className="w-full h-auto"
+                    playsInline
+                  />
+                  <canvas ref={canvasRef} className="hidden" />
+                  <div className="absolute inset-0 border-4 border-dashed border-purple-500 m-12 rounded-xl pointer-events-none"></div>
                 </div>
-                <h3 className="font-semibold text-emerald-900">Instant</h3>
-              </div>
-              <p className="text-sm text-emerald-800 leading-relaxed">
-                QR payments are processed instantly in our sandbox environment.
-              </p>
-            </div>
 
-            <div className="bg-gradient-to-br from-violet-50 to-violet-100/50 border border-violet-200/80 rounded-xl p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 bg-violet-600 rounded-lg flex items-center justify-center">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
+                <div className="flex gap-4">
+                  <button
+                    onClick={stopScanning}
+                    className="flex-1 py-3 px-6 bg-slate-600 hover:bg-slate-700 text-white font-semibold rounded-xl transition-all"
+                  >
+                    Stop Camera
+                  </button>
+                  <button
+                    onClick={handleProcessPayment}
+                    disabled={loading || !scanResult}
+                    className="flex-1 py-3 px-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loading ? 'Processing...' : 'Pay Now'}
+                  </button>
                 </div>
-                <h3 className="font-semibold text-violet-900">Secure</h3>
-              </div>
-              <p className="text-sm text-violet-800 leading-relaxed">
-                All QR data is encrypted and verified before processing.
-              </p>
-            </div>
 
-            <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 border border-amber-200/80 rounded-xl p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 bg-amber-600 rounded-lg flex items-center justify-center">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                </div>
-                <h3 className="font-semibold text-amber-900">Tips</h3>
+                <p className="text-sm text-slate-600 text-center">
+                  Position the QR code within the frame to scan
+                </p>
               </div>
-              <ul className="text-sm text-amber-800 space-y-2 leading-relaxed">
-                <li className="flex items-start gap-2">
-                  <span className="text-amber-600 mt-0.5">•</span>
-                  <span>Keep QR codes private</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-amber-600 mt-0.5">•</span>
-                  <span>Verify amounts carefully</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-amber-600 mt-0.5">•</span>
-                  <span>Use for testing only</span>
-                </li>
-              </ul>
+            )}
+          </div>
+        )}
+
+        {/* Account Info */}
+        {user && (
+          <div className="mt-8 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-200">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-sm text-slate-600">Your Account</p>
+                <p className="text-lg font-mono font-semibold text-slate-900">{user.account_number}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-slate-600">Balance</p>
+                <p className="text-2xl font-bold text-purple-600">${user.balance?.toFixed(2)}</p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   )

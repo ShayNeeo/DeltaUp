@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
-import axios from 'axios'
+import { transactionAPI } from '@/lib/api'
 import Preloader from '@/components/Preloader'
 
 interface BalanceData {
@@ -23,16 +23,20 @@ export default function Balance() {
     const fetchBalance = async () => {
       try {
         const token = localStorage.getItem('token')
-        const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/balance`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-        setBalance(response.data)
+        if (!token) {
+          router.push('/login')
+          return
+        }
+
+        // Fetch real balance from backend
+        const response = await transactionAPI.getBalance()
+        setBalance(response)
       } catch (err: any) {
         setError(err.response?.data?.message || 'Failed to fetch balance')
       } finally {
         const elapsed = Date.now() - startTime
         const remaining = Math.max(0, minDisplayTime - elapsed)
-        
+
         setTimeout(() => {
           setLoading(false)
           // Small delay before showing content for smooth transition
