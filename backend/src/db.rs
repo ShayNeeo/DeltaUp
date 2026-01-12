@@ -59,17 +59,18 @@ pub async fn init_db(database_url: &str) -> Result<sqlx::PgPool, sqlx::Error> {
     .execute(&pool)
     .await?;
 
-    sqlx::query(
-        r#"
-        CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-        CREATE INDEX IF NOT EXISTS idx_users_account_number ON users(account_number);
-        CREATE INDEX IF NOT EXISTS idx_transactions_from_account ON transactions(from_account);
-        CREATE INDEX IF NOT EXISTS idx_transactions_to_account ON transactions(to_account);
-        CREATE INDEX IF NOT EXISTS idx_oauth_codes_user_id ON oauth_codes(user_id);
-        "#,
-    )
-    .execute(&pool)
-    .await?;
+    // Run index creation commands separately to avoid "multiple commands in prepared statement" error
+    let index_commands = [
+        "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
+        "CREATE INDEX IF NOT EXISTS idx_users_account_number ON users(account_number)",
+        "CREATE INDEX IF NOT EXISTS idx_transactions_from_account ON transactions(from_account)",
+        "CREATE INDEX IF NOT EXISTS idx_transactions_to_account ON transactions(to_account)",
+        "CREATE INDEX IF NOT EXISTS idx_oauth_codes_user_id ON oauth_codes(user_id)",
+    ];
+
+    for cmd in index_commands {
+        sqlx::query(cmd).execute(&pool).await?;
+    }
 
     Ok(pool)
 }
