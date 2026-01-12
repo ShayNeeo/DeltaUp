@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import QRCode from 'qrcode'
+import Image from 'next/image'
 import { transactionAPI, getUser } from '@/lib/api'
 
 export default function QRPayment() {
@@ -100,8 +101,6 @@ export default function QRPayment() {
     canvas.height = video.videoHeight
     context.drawImage(video, 0, 0, canvas.width, canvas.height)
 
-    const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
-
     // Note: In production, use a proper QR code scanner library like jsQR
     // This is a simplified version
     setTimeout(() => {
@@ -123,7 +122,7 @@ export default function QRPayment() {
     setSuccess('')
 
     try {
-      const response = await transactionAPI.qrPayment({ qr_data: scanResult })
+      await transactionAPI.qrPayment({ qr_data: scanResult })
       setSuccess('Payment processed successfully!')
       setScanResult('')
       stopScanning()
@@ -154,8 +153,8 @@ export default function QRPayment() {
               stopScanning()
             }}
             className={`flex-1 py-3 px-6 rounded-xl font-semibold transition-all ${mode === 'generate'
-                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
-                : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'
+              ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
+              : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'
               }`}
           >
             📱 Generate QR
@@ -163,8 +162,8 @@ export default function QRPayment() {
           <button
             onClick={() => setMode('scan')}
             className={`flex-1 py-3 px-6 rounded-xl font-semibold transition-all ${mode === 'scan'
-                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
-                : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'
+              ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
+              : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'
               }`}
           >
             📷 Scan QR
@@ -227,7 +226,7 @@ export default function QRPayment() {
             {qrCodeUrl && (
               <div className="text-center">
                 <div className="inline-block p-6 bg-white rounded-2xl border-2 border-slate-200">
-                  <img src={qrCodeUrl} alt="Payment QR Code" className="w-64 h-64" />
+                  <Image src={qrCodeUrl} alt="Payment QR Code" width={256} height={256} unoptimized={true} />
                 </div>
                 <p className="mt-4 text-sm text-slate-600">
                   Show this QR code to receive ${parseFloat(amount).toFixed(2)}

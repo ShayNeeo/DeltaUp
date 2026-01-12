@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useRouter } from 'next/router'
-import axios from 'axios'
+import { transactionAPI } from '@/lib/api'
 
 interface FormData {
   recipient_account: string
@@ -31,14 +31,15 @@ export default function Transfer() {
     setSuccess('')
 
     try {
-      const token = localStorage.getItem('token')
-      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/transfer`, formData, {
-        headers: { Authorization: `Bearer ${token}` }
+      await transactionAPI.transfer({
+        recipient_account: formData.recipient_account,
+        amount: parseFloat(formData.amount),
+        description: formData.description
       })
 
       setSuccess('Transfer successful! 🎉')
       setFormData({ recipient_account: '', amount: '', description: '' })
-      setTimeout(() => router.push('/'), 2000)
+      setTimeout(() => router.push('/dashboard'), 2000)
     } catch (err: any) {
       setError(err.response?.data?.message || 'Transfer failed')
     } finally {
