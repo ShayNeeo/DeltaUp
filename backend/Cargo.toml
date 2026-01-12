@@ -21,9 +21,11 @@ bcrypt = "0.15"
 dotenv = "0.15"
 env_logger = "0.11"
 log = "0.4"
-sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "postgres", "migrate"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "postgres", "migrate", "uuid", "chrono", "rust_decimal"] }
 anyhow = "1.0"
 thiserror = "1.0"
+rust_decimal = { version = "1.33", features = ["serde-float"] }
+rust_decimal_macros = "1.33"
 rand = "0.8"
 
 [profile.release]

@@ -13,15 +13,18 @@ async fn main() -> std::io::Result<()> {
     env::set_var("RUST_LOG", "info");
     env_logger::init();
 
-    let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://fintech.db".to_string());
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let domain = env::var("DOMAIN").unwrap_or_else(|_| "localhost".to_string());
     let allowed_origins = env::var("ALLOWED_ORIGINS")
         .unwrap_or_else(|_| "http://localhost:3000,https://localhost:3000".to_string());
     
     println!("🚀 Starting DeltaUp API Server");
-    println!("📊 Database: {}", database_url);
     println!("🌐 Domain: {}", domain);
     println!("🔒 CORS Origins: {}", allowed_origins);
+
+    // Initialize database
+    let pool = db::init_db(&database_url).await.expect("Failed to initialize database");
+    println!("📊 Database connected successfully");
 
     // Parse allowed origins
     let origins: Vec<String> = allowed_origins
@@ -45,6 +48,7 @@ async fn main() -> std::io::Result<()> {
         }
 
         App::new()
+            .app_data(web::Data::new(pool.clone()))
             .wrap(Logger::default())
             .wrap(cors)
             
