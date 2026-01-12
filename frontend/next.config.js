@@ -2,6 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   productionBrowserSourceMaps: false,
+  output: 'standalone',
   env: {
     // Use https for production, http for development
     API_URL: process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? 'https://localhost:443' : 'http://localhost:8000'),

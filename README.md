@@ -1,165 +1,75 @@
-# 🚀 DeltaUp - Fintech Application
+# DeltaUp - Fintech Application
 
-Welcome! You now have **DeltaUp**, a production-ready fintech application ready to deploy to your VPS.
+Modern fintech application built with Next.js frontend and Rust backend.
 
-## 📋 Quick Summary
+## Tech Stack
 
-- **App Name:** DeltaUp
-- **Frontend:** Next.js + TailwindCSS
-- **Backend:** Rust + Actix-web
-- **Database:** SQLite
-- **Deployment:** Single command to VPS with SSL/TLS
+- **Frontend**: Next.js 15 + TailwindCSS
+- **Backend**: Rust (Actix-web)
+- **Database**: PostgreSQL 15
+- **Deployment**: Dokploy
 
-## ⚡ Deploy in One Command
+## Deployment
 
-```bash
-DOMAIN=deltaup.io EMAIL=admin@deltaup.io ./install.sh
-```
+### Dokploy Configuration
 
-That's it! The script will:
-1. Install all dependencies (Node, Rust, Nginx, Certbot)
-2. Build frontend and backend
-3. Generate SSL certificate (Let's Encrypt)
-4. Configure reverse proxy (Nginx)
-5. Setup services (Systemd)
-6. Enable auto-renewal
+1. **Database**: Create a PostgreSQL 15 database in Dokploy
+2. **Backend**:
+   - Use `Dockerfile` for production (pulls from GHCR)
+   - Use `Dockerfile.build` for development
+   - Set environment variables:
+     - `DATABASE_URL`: PostgreSQL connection string from Dokploy
+     - `JWT_SECRET`: Random secure string
+     - `DOMAIN`: Your domain
+     - `PORT`: 8000
 
-**Deployment takes:** ~10 minutes
+3. **Frontend**:
+   - Use `Dockerfile` for production (pulls from GHCR)
+   - Use `Dockerfile.build` for development
+   - Set environment variables:
+     - `NEXT_PUBLIC_API_URL`: Backend API URL
+     - `NODE_ENV`: production
 
-## 🌐 After Deployment
+### Environment Variables
 
-- **Frontend:** https://deltaup.io
-- **API:** https://deltaup.io/api/*
-- **OAuth:** https://deltaup.io/oauth/*
-
-## 📚 Documentation
-
-- **README.md** - Project overview
-- **DEPLOYMENT.md** - Detailed deployment guide
-- **guide.md** - Additional information
-
-## 🎯 Project Structure
-
-```
-DeltaUp/
-├── frontend/          # Next.js app (port 3000)
-│   ├── pages/        # All pages (transfer, balance, qr-payment)
-│   └── styles/       # TailwindCSS styles
-├── backend/          # Rust API server (port 8000)
-│   ├── src/         # Rust source code
-│   └── Cargo.toml   # Dependencies
-└── install.sh        # Deployment script
-```
-
-## 🔧 Key Features
-
-✅ **Bank Transfer** - Send money to accounts
-✅ **Balance Check** - View account balance
-✅ **QR Payments** - Generate & process QR codes
-✅ **OAuth Ready** - Integrate with OpenAPI
-✅ **SSL/TLS** - Automatic HTTPS with Let's Encrypt
-✅ **Auto-Renewal** - Certificates auto-renew monthly
-✅ **Auto-Restart** - Services restart on failure
-✅ **Production Ready** - Nginx reverse proxy
-
-## 🔐 Security
-
-- HTTPS/TLS 1.2+
-- JWT Authentication
-- CORS Protection
-- Strong Ciphers
-- Automatic SSL renewal
-- HTTP/2 Support
-
-## 📊 Service Names
-
-The following systemd services are created:
-- `deltaup-backend.service` - Rust backend
-- `deltaup-frontend.service` - Next.js frontend
-
-## 🛠️ Commands After Deploy
+Copy `.env.example` files and configure:
 
 ```bash
-# Start services
-sudo systemctl start deltaup-backend deltaup-frontend
+# Backend
+cd backend
+cp .env.example .env
 
-# Enable auto-start on boot
-sudo systemctl enable deltaup-backend deltaup-frontend
-
-# Check status
-sudo systemctl status deltaup-backend deltaup-frontend
-
-# View logs
-sudo journalctl -u deltaup-backend -f
-sudo journalctl -u deltaup-frontend -f
-
-# Restart services
-sudo systemctl restart deltaup-backend deltaup-frontend
+# Frontend
+cd frontend
+cp .env.example .env
 ```
 
-## 📝 Environment Variables
+## CI/CD
 
-The script automatically generates `.env.production` with:
-- `DOMAIN` - Your domain (deltaup.io)
-- `EMAIL` - For SSL certificate notifications
+GitHub Actions workflow builds multi-architecture images (AMD64 + ARM64) and pushes to GitHub Container Registry.
 
-## 🔄 SSL Certificate
+Images:
+- `ghcr.io/shayneeo/deltaup-backend:latest`
+- `ghcr.io/shayneeo/deltaup-frontend:latest`
 
-- **Auto-generated:** Let's Encrypt
-- **Valid for:** 90 days
-- **Auto-renewal:** 1st of each month at 2 AM UTC
-- **Location:** `/etc/letsencrypt/live/deltaup.io/`
-
-## ✅ Deployment Checklist
-
-- [ ] VPS with Ubuntu/Debian running
-- [ ] Domain (deltaup.io) DNS records pointing to VPS
-- [ ] SSH access to VPS
-- [ ] Run: `DOMAIN=deltaup.io EMAIL=admin@deltaup.io ./install.sh`
-- [ ] Wait for completion
-- [ ] Visit https://deltaup.io
-
-## 🆘 Troubleshooting
-
-**Services not running?**
-```bash
-sudo systemctl status deltaup-backend deltaup-frontend
-```
-
-**View error logs?**
-```bash
-sudo journalctl -u deltaup-backend -n 50
-```
-
-**Certificate issues?**
-```bash
-sudo certbot certificates
-```
-
-**Nginx problems?**
-```bash
-sudo nginx -t
-sudo systemctl status nginx
-```
-
-## 📞 Need Help?
-
-1. Check logs: `sudo journalctl -u deltaup-* -f`
-2. Test API: `curl -I https://deltaup.io/api/health`
-3. Check certificate: `sudo certbot certificates`
-4. Read DEPLOYMENT.md for detailed information
-
-## 🎉 Ready to Deploy?
+## Development
 
 ```bash
-DOMAIN=deltaup.io EMAIL=admin@deltaup.io ./install.sh
+# Backend
+cd backend
+cargo run
+
+# Frontend
+cd frontend
+npm install
+npm run dev
 ```
 
-Then monitor the process and access your application at https://deltaup.io!
+## Features
 
----
-
-**App Name:** DeltaUp ✅
-**Version:** 1.0.0
-**Status:** Production Ready
-
+- User authentication (JWT)
+- Bank transfers
+- QR payments
+- Balance checking
+- Transaction history
+- Profile management

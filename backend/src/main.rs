@@ -31,6 +31,11 @@ async fn main() -> std::io::Result<()> {
             .wrap(Logger::default())
             .wrap(cors)
             
+            // Authentication endpoints
+            .route("/api/auth/register", web::post().to(auth::register))
+            .route("/api/auth/login", web::post().to(auth::login))
+            .route("/api/user/profile", web::get().to(auth::get_profile))
+            
             // OAuth endpoints
             .route("/oauth/authorize", web::get().to(oauth::authorize))
             .route("/oauth/token", web::post().to(oauth::token))
@@ -39,9 +44,10 @@ async fn main() -> std::io::Result<()> {
             .route("/api/transfer", web::post().to(handlers::transfer))
             .route("/api/balance", web::get().to(handlers::get_balance))
             .route("/api/qr-payment", web::post().to(handlers::qr_payment))
+            .route("/api/transactions", web::get().to(handlers::get_transactions))
             .route("/api/health", web::get().to(handlers::health))
     })
-    .bind("127.0.0.1:8000")?
+    .bind("0.0.0.0:8000")?
     .run()
     .await
 }

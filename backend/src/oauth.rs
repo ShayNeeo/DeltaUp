@@ -1,7 +1,8 @@
 use actix_web::{web, HttpResponse};
 use crate::models::*;
-use crate::auth::create_token;
 use uuid::Uuid;
+use jsonwebtoken::{encode, Header, EncodingKey};
+use crate::auth::Claims;
 
 pub async fn authorize(query: web::Query<OAuthAuthorizeRequest>) -> HttpResponse {
     // Validate request
@@ -50,7 +51,24 @@ pub async fn token(body: web::Json<OAuthTokenRequest>) -> HttpResponse {
     // TODO: Create or fetch user from database
 
     let user_id = Uuid::new_v4().to_string();
-    let access_token = create_token(&user_id);
+    
+    // Create JWT token
+    let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "your-secret-key".to_string());
+    let expiration = chrono::Utc::now()
+        .checked_add_signed(chrono::Duration::days(7))
+        .expect("valid timestamp")
+        .timestamp() as usize;
+
+    let claims = Claims {
+        sub: user_id.clone(),
+        exp: expiration,
+    };
+
+    let access_token = encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    ).unwrap_or_default();
 
     // Mock user data - in production this would come from database
     let user = User {
