@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
-import axios from 'axios'
+import { authAPI } from '@/lib/api'
 
 export default function Register() {
     const router = useRouter()
@@ -31,15 +31,14 @@ export default function Register() {
         setLoading(true)
 
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-            const response = await axios.post(`${apiUrl}/api/auth/register`, {
+            const response = await authAPI.register({
                 username: formData.username,
                 email: formData.email,
                 password: formData.password
             })
 
-            localStorage.setItem('token', response.data.token)
-            localStorage.setItem('user', JSON.stringify(response.data.user))
+            localStorage.setItem('token', response.token)
+            localStorage.setItem('user', JSON.stringify(response.user))
 
             router.push('/dashboard')
         } catch (err: any) {

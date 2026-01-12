@@ -15,17 +15,34 @@ async fn main() -> std::io::Result<()> {
 
     let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://fintech.db".to_string());
     let domain = env::var("DOMAIN").unwrap_or_else(|_| "localhost".to_string());
+    let allowed_origins = env::var("ALLOWED_ORIGINS")
+        .unwrap_or_else(|_| "http://localhost:3000,https://localhost:3000".to_string());
     
     println!("🚀 Starting DeltaUp API Server");
     println!("📊 Database: {}", database_url);
     println!("🌐 Domain: {}", domain);
+    println!("🔒 CORS Origins: {}", allowed_origins);
+
+    // Parse allowed origins
+    let origins: Vec<String> = allowed_origins
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .collect();
 
     HttpServer::new(move || {
-        let cors = Cors::default()
-            .allow_any_origin()
-            .allow_any_method()
-            .allow_any_header()
+        let mut cors = Cors::default()
+            .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+            .allowed_headers(vec![
+                actix_web::http::header::AUTHORIZATION,
+                actix_web::http::header::ACCEPT,
+                actix_web::http::header::CONTENT_TYPE,
+            ])
             .max_age(3600);
+
+        // Add each allowed origin
+        for origin in &origins {
+            cors = cors.allowed_origin(origin);
+        }
 
         App::new()
             .wrap(Logger::default())
