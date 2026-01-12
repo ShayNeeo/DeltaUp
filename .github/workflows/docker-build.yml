@@ -113,6 +113,8 @@ jobs:
           file: ./frontend/Dockerfile.build
           platforms: ${{ matrix.platform }}
           push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL || 'https://api.deltaup.io' }}
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/deltaup-frontend:buildcache-${{ matrix.arch }}
