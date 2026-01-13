@@ -4,9 +4,11 @@ WORKDIR /app
 
 # Accept build arguments
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ARG NEXT_PUBLIC_OPENROUTER_API_KEY
 
-# Set as environment variable during build
+# Set as environment variables during build
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_OPENROUTER_API_KEY=$NEXT_PUBLIC_OPENROUTER_API_KEY
 
 COPY package*.json ./
 RUN npm ci
