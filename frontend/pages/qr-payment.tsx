@@ -5,6 +5,13 @@ import Image from 'next/image'
 import jsqr from 'jsqr'
 import { transactionAPI, getUser } from '@/lib/api'
 
+interface ScannedPaymentData {
+  account: string
+  amount: number
+  description: string
+  timestamp: string
+}
+
 export default function QRPayment() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
@@ -12,7 +19,6 @@ export default function QRPayment() {
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [qrCodeUrl, setQrCodeUrl] = useState('')
-  const [scanResult, setScanResult] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -20,6 +26,8 @@ export default function QRPayment() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [scanning, setScanning] = useState(false)
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment')
+  const [scannedData, setScannedData] = useState<ScannedPaymentData | null>(null)
+  const scanningRef = useRef(false)
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -64,7 +72,10 @@ export default function QRPayment() {
   // Start camera for scanning
   const startScanning = async () => {
     setScanning(true)
+    scanningRef.current = true
     setError('')
+    setSuccess('')
+    setScannedData(null)
   }
 
   useEffect(() => {
@@ -84,6 +95,7 @@ export default function QRPayment() {
         } catch (err) {
           setError('Camera access denied. Please enable camera permissions.')
           setScanning(false)
+          scanningRef.current = false
         }
       }
     }
@@ -110,15 +122,16 @@ export default function QRPayment() {
       videoRef.current.srcObject = null
     }
     setScanning(false)
+    scanningRef.current = false
+    setScannedData(null)
   }
-
 
   // Scan QR code from video
   const scanQRCode = () => {
     const canvas = canvasRef.current
     const video = videoRef.current
 
-    if (!canvas || !video || !scanning) return
+    if (!canvas || !video || !scanningRef.current) return
 
     const context = canvas.getContext('2d', { willReadFrequently: true })
     if (!context) return
@@ -135,40 +148,63 @@ export default function QRPayment() {
 
       if (code) {
         console.log('QR Code detected:', code.data)
-        setScanResult(code.data)
 
-        // Visual/Haptic feedback
-        if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
-          window.navigator.vibrate(200)
+        // Pause scanning loop
+        scanningRef.current = false
+
+        // Parse QR data
+        try {
+          const paymentData = JSON.parse(code.data) as ScannedPaymentData
+          setScannedData(paymentData)
+
+          // Visual/Haptic feedback
+          if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+            window.navigator.vibrate(200)
+          }
+        } catch (err) {
+          setError('Invalid QR code format')
+          scanningRef.current = true // Resume scanning
         }
-
-        // Stop scanning once we find a code
-        stopScanning()
         return
       }
     }
 
+    if (scanningRef.current) {
+      requestAnimationFrame(scanQRCode)
+    }
+  }
+
+  // Cancel scanned payment
+  const cancelScannedPayment = () => {
+    setScannedData(null)
+    scanningRef.current = true
+    setError('')
     requestAnimationFrame(scanQRCode)
   }
 
-  // Process scanned QR code
-  const handleProcessPayment = async () => {
-    if (!scanResult) {
-      setError('No QR code scanned')
-      return
-    }
+  // Confirm and process scanned payment
+  const confirmPayment = async () => {
+    if (!scannedData) return
 
     setLoading(true)
     setError('')
     setSuccess('')
 
     try {
-      await transactionAPI.qrPayment({ qr_data: scanResult })
-      setSuccess('Payment processed successfully!')
-      setScanResult('')
+      const qrData = JSON.stringify(scannedData)
+      await transactionAPI.qrPayment({ qr_data: qrData })
+      setSuccess(`Payment of $${scannedData.amount.toFixed(2)} sent successfully!`)
       stopScanning()
+
+      // Reset after 3 seconds
+      setTimeout(() => {
+        setSuccess('')
+      }, 3000)
     } catch (err: any) {
       setError(err.response?.data?.message || 'Payment failed')
+      setScannedData(null)
+      scanningRef.current = true
+      requestAnimationFrame(scanQRCode)
     } finally {
       setLoading(false)
     }
@@ -192,6 +228,8 @@ export default function QRPayment() {
             onClick={() => {
               setMode('generate')
               stopScanning()
+              setSuccess('')
+              setError('')
             }}
             className={`flex-1 py-3 px-6 rounded-xl font-semibold transition-all ${mode === 'generate'
               ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
@@ -201,7 +239,12 @@ export default function QRPayment() {
             📱 Generate QR
           </button>
           <button
-            onClick={() => setMode('scan')}
+            onClick={() => {
+              setMode('scan')
+              setQrCodeUrl('')
+              setSuccess('')
+              setError('')
+            }}
             className={`flex-1 py-3 px-6 rounded-xl font-semibold transition-all ${mode === 'scan'
               ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
               : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'
@@ -236,13 +279,13 @@ export default function QRPayment() {
                 <input
                   type="number"
                   step="0.01"
+                  min="0"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
                   placeholder="0.00"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Description (Optional)
@@ -251,22 +294,22 @@ export default function QRPayment() {
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
                   placeholder="Payment for..."
+                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
               </div>
-
-              <button
-                onClick={handleGenerateQR}
-                className="w-full py-3 px-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-xl shadow-lg transition-all"
-              >
-                Generate QR Code
-              </button>
             </div>
 
+            <button
+              onClick={handleGenerateQR}
+              className="w-full py-4 px-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-xl shadow-lg transition-all text-lg"
+            >
+              Generate QR Code
+            </button>
+
             {qrCodeUrl && (
-              <div className="text-center">
-                <div className="inline-block p-6 bg-white rounded-2xl border-2 border-slate-200">
+              <div className="mt-8 text-center">
+                <div className="inline-block p-6 bg-white rounded-2xl shadow-xl border-4 border-purple-500">
                   <Image src={qrCodeUrl} alt="Payment QR Code" width={256} height={256} unoptimized={true} />
                 </div>
                 <p className="mt-4 text-sm text-slate-600">
@@ -319,7 +362,8 @@ export default function QRPayment() {
                   {/* Camera Toggle Button Overlay */}
                   <button
                     onClick={toggleCamera}
-                    className="absolute top-6 right-6 p-4 bg-white/10 hover:bg-white/20 text-white rounded-full shadow-lg transition-all backdrop-blur-md border border-white/20 group-hover:scale-110 active:scale-95"
+                    disabled={!!scannedData}
+                    className="absolute top-6 right-6 p-4 bg-white/10 hover:bg-white/20 text-white rounded-full shadow-lg transition-all backdrop-blur-md border border-white/20 group-hover:scale-110 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                     title={`Switch to ${facingMode === 'environment' ? 'front' : 'rear'} camera`}
                   >
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -329,9 +373,57 @@ export default function QRPayment() {
 
                   <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/40 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/10">
                     <p className="text-white text-xs font-medium tracking-wider uppercase">
-                      Scanning for QR code...
+                      {scannedData ? '✓ QR Code Detected' : 'Scanning for QR code...'}
                     </p>
                   </div>
+
+                  {/* Confirmation Modal Overlay */}
+                  {scannedData && (
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-fadeIn">
+                      <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+                        <div className="text-center mb-4">
+                          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                          <h3 className="text-xl font-bold text-slate-900">Payment Confirmation</h3>
+                        </div>
+
+                        <div className="space-y-3 mb-6">
+                          <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                            <span className="text-slate-600">Amount:</span>
+                            <span className="text-2xl font-bold text-purple-600">${scannedData.amount.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                            <span className="text-slate-600">To Account:</span>
+                            <span className="font-mono text-sm text-slate-900">{scannedData.account}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-600">Description:</span>
+                            <span className="text-slate-900">{scannedData.description}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-3">
+                          <button
+                            onClick={cancelScannedPayment}
+                            disabled={loading}
+                            className="flex-1 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-all disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={confirmPayment}
+                            disabled={loading}
+                            className="flex-1 py-3 px-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-xl transition-all disabled:opacity-50"
+                          >
+                            {loading ? 'Processing...' : 'Confirm Payment'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <style jsx>{`
@@ -345,45 +437,23 @@ export default function QRPayment() {
                     position: absolute;
                     animation: scanner 2s linear infinite;
                   }
+                  @keyframes fadeIn {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                  }
+                  .animate-fadeIn {
+                    animation: fadeIn 0.3s ease-out;
+                  }
                 `}</style>
 
-                <div className="flex gap-4">
-                  <button
-                    onClick={stopScanning}
-                    className="flex-1 py-3 px-6 bg-slate-600 hover:bg-slate-700 text-white font-semibold rounded-xl transition-all"
-                  >
-                    Stop Camera
-                  </button>
-                  <button
-                    onClick={handleProcessPayment}
-                    disabled={loading || !scanResult}
-                    className="flex-1 py-3 px-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? 'Processing...' : 'Pay Now'}
-                  </button>
-                </div>
-
-                <p className="text-sm text-slate-600 text-center">
-                  Position the QR code within the frame to scan
-                </p>
+                <button
+                  onClick={stopScanning}
+                  className="w-full py-3 px-6 bg-slate-600 hover:bg-slate-700 text-white font-semibold rounded-xl transition-all"
+                >
+                  Stop Camera
+                </button>
               </div>
             )}
-          </div>
-        )}
-
-        {/* Account Info */}
-        {user && (
-          <div className="mt-8 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-200">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm text-slate-600">Your Account</p>
-                <p className="text-lg font-mono font-semibold text-slate-900">{user.account_number}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm text-slate-600">Balance</p>
-                <p className="text-2xl font-bold text-purple-600">${user.balance?.toFixed(2)}</p>
-              </div>
-            </div>
           </div>
         )}
       </div>
