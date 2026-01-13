@@ -18,6 +18,7 @@ export default function QRPayment() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [scanning, setScanning] = useState(false)
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment')
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -63,7 +64,7 @@ export default function QRPayment() {
   const startScanning = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
+        video: { facingMode: facingMode }
       })
 
       if (videoRef.current) {
@@ -75,6 +76,16 @@ export default function QRPayment() {
     } catch (err) {
       setError('Camera access denied. Please enable camera permissions.')
     }
+  }
+
+  // Toggle camera between front and rear
+  const toggleCamera = async () => {
+    stopScanning()
+    setFacingMode(prev => prev === 'environment' ? 'user' : 'environment')
+    // Restart scanning with new camera after a brief delay
+    setTimeout(() => {
+      startScanning()
+    }, 100)
   }
 
   // Stop camera
@@ -250,15 +261,61 @@ export default function QRPayment() {
               </button>
             ) : (
               <div className="space-y-4">
-                <div className="relative bg-black rounded-xl overflow-hidden">
+                <div className="relative bg-black rounded-3xl overflow-hidden shadow-2xl group border-4 border-purple-500/30">
                   <video
                     ref={videoRef}
-                    className="w-full h-auto"
+                    className="w-full h-[400px] object-cover"
                     playsInline
                   />
                   <canvas ref={canvasRef} className="hidden" />
-                  <div className="absolute inset-0 border-4 border-dashed border-purple-500 m-12 rounded-xl pointer-events-none"></div>
+
+                  {/* Viewfinder Overlay */}
+                  <div className="absolute inset-0 flex items-center justify-center p-8 pointer-events-none">
+                    <div className="relative w-full aspect-square max-w-[280px]">
+                      {/* Corners */}
+                      <div className="absolute top-0 left-0 w-8 h-8 border-l-4 border-t-4 border-purple-500 rounded-tl-lg"></div>
+                      <div className="absolute top-0 right-0 w-8 h-8 border-r-4 border-t-4 border-purple-500 rounded-tr-lg"></div>
+                      <div className="absolute bottom-0 left-0 w-8 h-8 border-l-4 border-b-4 border-purple-500 rounded-bl-lg"></div>
+                      <div className="absolute bottom-0 right-0 w-8 h-8 border-r-4 border-b-4 border-purple-500 rounded-br-lg"></div>
+
+                      {/* Animated Scanning Line */}
+                      <div className="absolute left-0 right-0 h-1 bg-gradient-to-r from-transparent via-purple-400 to-transparent shadow-[0_0_15px_rgba(168,85,247,0.8)] animate-scanner"></div>
+                    </div>
+                  </div>
+
+                  {/* Shading Layer */}
+                  <div className="absolute inset-0 bg-black/20 pointer-events-none"></div>
+
+                  {/* Camera Toggle Button Overlay */}
+                  <button
+                    onClick={toggleCamera}
+                    className="absolute top-6 right-6 p-4 bg-white/10 hover:bg-white/20 text-white rounded-full shadow-lg transition-all backdrop-blur-md border border-white/20 group-hover:scale-110 active:scale-95"
+                    title={`Switch to ${facingMode === 'environment' ? 'front' : 'rear'} camera`}
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
+
+                  <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/40 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/10">
+                    <p className="text-white text-xs font-medium tracking-wider uppercase">
+                      Scanning for QR code...
+                    </p>
+                  </div>
                 </div>
+
+                <style jsx>{`
+                  @keyframes scanner {
+                    0% { top: 0%; opacity: 0; }
+                    10% { opacity: 1; }
+                    90% { opacity: 1; }
+                    100% { top: 100%; opacity: 0; }
+                  }
+                  .animate-scanner {
+                    position: absolute;
+                    animation: scanner 2s linear infinite;
+                  }
+                `}</style>
 
                 <div className="flex gap-4">
                   <button
