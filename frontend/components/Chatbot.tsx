@@ -34,6 +34,13 @@ API:
 - GET /balance, /transactions
 
 Env: NEXT_PUBLIC_API_URL, DATABASE_URL, JWT_SECRET, OPENROUTER_API_KEY
+
+How-To:
+- Transfer: Go to "Transfer" page, enter recipient account # & amount.
+- Find Account #: Visible on Dashboard and Profile pages.
+- Register: Use "Register" link on the login page.
+- QR Pay: "QR Payment" -> "Scan" to pay or "Generate" to receive.
+- Transactions: History is at bottom of Dashboard.
 `
 
 export default function Chatbot({ isOpen, onClose }: ChatbotProps) {
@@ -128,6 +135,9 @@ Instructions:
                 }
             })
 
+            // Initialize an empty assistant message to stream into
+            setMessages(prev => [...prev, { role: 'assistant', content: '' }])
+
             let response = ''
             for await (const chunk of stream) {
                 const content = chunk.choices[0]?.delta?.content
@@ -136,10 +146,11 @@ Instructions:
                     setMessages(prev => {
                         const newMessages = [...prev]
                         const lastMsg = newMessages[newMessages.length - 1]
-                        if (lastMsg?.role === 'assistant' && lastMsg.content === '') {
-                            lastMsg.content = response
-                        } else if (lastMsg?.role !== 'assistant') {
-                            newMessages.push({ role: 'assistant', content: response })
+                        if (lastMsg && lastMsg.role === 'assistant') {
+                            newMessages[newMessages.length - 1] = {
+                                ...lastMsg,
+                                content: response
+                            }
                         }
                         return newMessages
                     })
