@@ -168,16 +168,16 @@ pub async fn get_balance(
 }
 
 pub async fn qr_payment(
-    _pool: web::Data<PgPool>,
+    pool: web::Data<PgPool>,
     req: HttpRequest,
     body: web::Json<QRPaymentRequest>,
 ) -> HttpResponse {
-    let _sender_id = match get_user_id_from_req(&req).await {
+    let sender_id = match get_user_id_from_req(&req).await {
         Some(id) => id,
         None => return HttpResponse::Unauthorized().finish(),
     };
 
-    // For now, simpler parsing of QR data (JSON expected)
+    // Parse QR data (JSON expected)
     let qr_payment_data: serde_json::Value = match serde_json::from_str(&body.qr_data) {
         Ok(v) => v,
         Err(_) => return HttpResponse::BadRequest().json(ErrorResponse {
@@ -188,23 +188,127 @@ pub async fn qr_payment(
 
     let recipient_account = match qr_payment_data["account"].as_str() {
         Some(s) => s.to_string(),
-        None => return HttpResponse::BadRequest().finish(),
+        None => return HttpResponse::BadRequest().json(ErrorResponse {
+            error: "invalid_qr".to_string(),
+            message: "Missing account in QR data".to_string(),
+        }),
     };
 
     let amount = match qr_payment_data["amount"].as_f64() {
         Some(f) => f,
-        None => return HttpResponse::BadRequest().finish(),
+        None => return HttpResponse::BadRequest().json(ErrorResponse {
+            error: "invalid_qr".to_string(),
+            message: "Missing or invalid amount in QR data".to_string(),
+        }),
     };
 
+    if amount <= 0.0 {
+        return HttpResponse::BadRequest().json(ErrorResponse {
+            error: "invalid_amount".to_string(),
+            message: "Amount must be greater than 0".to_string(),
+        });
+    }
+
     let description = qr_payment_data["description"].as_str().map(|s| s.to_string());
+
+    // Start transaction
+    let mut tx = match pool.begin().await {
+        Ok(t) => t,
+        Err(_) => return HttpResponse::InternalServerError().finish(),
+    };
+
+    // Get sender account and balance
+    let sender = match sqlx::query_as::<_, SenderBalanceRow>(
+        "SELECT account_number, balance FROM users WHERE id = $1 FOR UPDATE"
+    )
+    .bind(sender_id)
+    .fetch_one(&mut *tx)
+    .await {
+        Ok(s) => s,
+        Err(_) => return HttpResponse::InternalServerError().finish(),
+    };
+
+    let sender_balance: f64 = sender.balance.to_string().parse().unwrap_or(0.0);
+    if sender_balance < amount {
+        return HttpResponse::BadRequest().json(ErrorResponse {
+            error: "insufficient_funds".to_string(),
+            message: "Insufficient funds for QR payment".to_string(),
+        });
+    }
+
+    // Get recipient
+    let recipient = match sqlx::query_as::<_, RecipientRow>(
+        "SELECT id, balance FROM users WHERE account_number = $1 FOR UPDATE"
+    )
+    .bind(&recipient_account)
+    .fetch_optional(&mut *tx)
+    .await {
+        Ok(Some(r)) => r,
+        Ok(None) => return HttpResponse::NotFound().json(ErrorResponse {
+            error: "recipient_not_found".to_string(),
+            message: "Recipient account not found".to_string(),
+        }),
+        Err(_) => return HttpResponse::InternalServerError().finish(),
+    };
+
+    // Update balances
+    let new_sender_balance = sender_balance - amount;
+    let recipient_balance: f64 = recipient.balance.to_string().parse().unwrap_or(0.0);
+    let new_recipient_balance = recipient_balance + amount;
+
+    if sqlx::query("UPDATE users SET balance = $1 WHERE id = $2")
+        .bind(new_sender_balance)
+        .bind(sender_id)
+        .execute(&mut *tx)
+        .await
+        .is_err()
+    {
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    if sqlx::query("UPDATE users SET balance = $1 WHERE id = $2")
+        .bind(new_recipient_balance)
+        .bind(recipient.id)
+        .execute(&mut *tx)
+        .await
+        .is_err()
+    {
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    // Record transaction
+    let transaction_id = Uuid::new_v4();
+    if sqlx::query(
+        "INSERT INTO transactions (id, from_account, to_account, amount, description, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)"
+    )
+    .bind(transaction_id)
+    .bind(&sender.account_number)
+    .bind(&recipient_account)
+    .bind(amount)
+    .bind(&description)
+    .bind("completed")
+    .bind(Utc::now().naive_utc())
+    .execute(&mut *tx)
+    .await
+    .is_err()
+    {
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    // Commit transaction
+    if tx.commit().await.is_err() {
+        return HttpResponse::InternalServerError().finish();
+    }
 
     HttpResponse::Ok().json(json!({
         "status": "completed",
         "message": "QR payment processed successfully",
-        "timestamp": Utc::now().to_rfc3339(),
-        "recipient": recipient_account,
+        "transaction_id": transaction_id.to_string(),
+        "from_account": sender.account_number,
+        "to_account": recipient_account,
         "amount": amount,
-        "description": description
+        "new_balance": new_sender_balance,
+        "timestamp": Utc::now().to_rfc3339()
     }))
 }
 
