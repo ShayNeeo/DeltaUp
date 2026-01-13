@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import QRCode from 'qrcode'
 import Image from 'next/image'
+import jsqr from 'jsqr'
 import { transactionAPI, getUser } from '@/lib/api'
 
 export default function QRPayment() {
@@ -111,6 +112,7 @@ export default function QRPayment() {
     setScanning(false)
   }
 
+
   // Scan QR code from video
   const scanQRCode = () => {
     const canvas = canvasRef.current
@@ -118,20 +120,35 @@ export default function QRPayment() {
 
     if (!canvas || !video || !scanning) return
 
-    const context = canvas.getContext('2d')
+    const context = canvas.getContext('2d', { willReadFrequently: true })
     if (!context) return
 
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
-    context.drawImage(video, 0, 0, canvas.width, canvas.height)
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      context.drawImage(video, 0, 0, canvas.width, canvas.height)
 
-    // Note: In production, use a proper QR code scanner library like jsQR
-    // This is a simplified version
-    setTimeout(() => {
-      if (scanning) {
-        scanQRCode()
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
+      const code = jsqr(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: "dontInvert",
+      })
+
+      if (code) {
+        console.log('QR Code detected:', code.data)
+        setScanResult(code.data)
+
+        // Visual/Haptic feedback
+        if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+          window.navigator.vibrate(200)
+        }
+
+        // Stop scanning once we find a code
+        stopScanning()
+        return
       }
-    }, 100)
+    }
+
+    requestAnimationFrame(scanQRCode)
   }
 
   // Process scanned QR code
