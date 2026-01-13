@@ -62,30 +62,43 @@ export default function QRPayment() {
 
   // Start camera for scanning
   const startScanning = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facingMode }
-      })
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        videoRef.current.play()
-        setScanning(true)
-        scanQRCode()
-      }
-    } catch (err) {
-      setError('Camera access denied. Please enable camera permissions.')
-    }
+    setScanning(true)
+    setError('')
   }
 
+  useEffect(() => {
+    let stream: MediaStream | null = null
+
+    const enableCamera = async () => {
+      if (scanning && videoRef.current) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: facingMode }
+          })
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream
+            videoRef.current.play()
+            scanQRCode()
+          }
+        } catch (err) {
+          setError('Camera access denied. Please enable camera permissions.')
+          setScanning(false)
+        }
+      }
+    }
+
+    enableCamera()
+
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop())
+      }
+    }
+  }, [scanning, facingMode])
+
   // Toggle camera between front and rear
-  const toggleCamera = async () => {
-    stopScanning()
+  const toggleCamera = () => {
     setFacingMode(prev => prev === 'environment' ? 'user' : 'environment')
-    // Restart scanning with new camera after a brief delay
-    setTimeout(() => {
-      startScanning()
-    }, 100)
   }
 
   // Stop camera
