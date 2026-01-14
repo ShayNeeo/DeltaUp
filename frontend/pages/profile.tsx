@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
-import { authAPI } from '@/lib/api'
+import { authAPI, logout } from '@/lib/api'
 
 interface User {
     username: string
@@ -38,7 +38,6 @@ export default function Profile() {
                 username: response.username,
                 email: response.email
             })
-            // Update localStorage with fresh data
             localStorage.setItem('user', JSON.stringify(response))
         } catch (err) {
             console.error('Failed to fetch user data:', err)
@@ -50,122 +49,127 @@ export default function Profile() {
 
     const handleUpdate = (e: React.FormEvent) => {
         e.preventDefault()
-        // Note: Profile update functionality will be added when backend endpoint is ready
+        // Feature to be implemented in backend
         setEditing(false)
-    }
-
-    const handleLogout = () => {
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-        router.push('/logout')
     }
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-indigo-900 to-slate-900">
-                <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div>
+            <div className="min-h-screen flex items-center justify-center bg-background">
+                <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div>
             </div>
         )
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-900 to-slate-900">
-            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <div className="flex justify-between items-center mb-8">
-                    <h1 className="text-4xl font-bold text-white">Profile</h1>
+        <div className="bg-background min-h-screen font-sans pb-12">
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 animate-slideUp">
+                <div className="flex justify-between items-center mb-10">
+                    <h1 className="text-3xl font-bold text-foreground tracking-tight">Account Profile</h1>
                     <Link
                         href="/dashboard"
-                        className="px-6 py-3 bg-white/10 backdrop-blur-md border border-white/20 rounded-xl text-white hover:bg-white/20 transition-all"
+                        className="px-6 py-2.5 bg-surface border border-border rounded-xl text-foreground font-medium hover:bg-surface-highlight transition-all"
                     >
-                        Dashboard
+                        Back to Dashboard
                     </Link>
                 </div>
 
-                <div className="bg-white/10 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-white/20">
+                <div className="glass-panel rounded-3xl p-8 sm:p-10 shadow-xl">
                     {!editing ? (
-                        <div className="space-y-6">
-                            <div className="flex items-center justify-center mb-8">
-                                <div className="w-32 h-32 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 flex items-center justify-center text-white text-5xl font-bold">
+                        <div className="space-y-10">
+                            <div className="flex flex-col items-center justify-center mb-4">
+                                <div className="w-28 h-28 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-4xl font-bold shadow-lg shadow-primary/20 mb-4">
                                     {user?.username.charAt(0).toUpperCase()}
+                                </div>
+                                <h2 className="text-2xl font-bold text-foreground">{user?.username}</h2>
+                                <p className="text-muted">{user?.email}</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-muted uppercase tracking-widest">Legal Name</label>
+                                    <p className="text-lg font-medium text-foreground">{user?.username}</p>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-muted uppercase tracking-widest">Email Address</label>
+                                    <p className="text-lg font-medium text-foreground">{user?.email}</p>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-muted uppercase tracking-widest">Account Number</label>
+                                    <p className="text-lg font-mono font-bold text-foreground">{user?.account_number}</p>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-muted uppercase tracking-widest">Available Balance</label>
+                                    <p className="text-lg font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                        ${user?.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                    </p>
                                 </div>
                             </div>
 
-                            <div>
-                                <label className="block text-sm font-medium text-indigo-300 mb-2">Username</label>
-                                <p className="text-2xl text-white font-semibold">{user?.username}</p>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-indigo-300 mb-2">Email</label>
-                                <p className="text-xl text-white">{user?.email}</p>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-indigo-300 mb-2">Account Number</label>
-                                <p className="text-xl text-white font-mono">{user?.account_number}</p>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-indigo-300 mb-2">Balance</label>
-                                <p className="text-2xl text-white font-bold">
-                                    ${user?.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                </p>
-                            </div>
-
-                            <div className="flex gap-4 pt-6">
+                            <div className="flex flex-col sm:flex-row gap-4 pt-10 border-t border-border">
                                 <button
                                     onClick={() => setEditing(true)}
-                                    className="flex-1 py-3 px-6 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold rounded-xl shadow-lg transition-all"
+                                    className="flex-1 py-3.5 px-6 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] transition-all"
                                 >
-                                    Edit Profile
+                                    Edit Account Details
                                 </button>
                                 <button
-                                    onClick={handleLogout}
-                                    className="flex-1 py-3 px-6 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl shadow-lg transition-all"
+                                    onClick={logout}
+                                    className="flex-1 py-3.5 px-6 bg-surface-highlight text-danger border border-border hover:bg-danger/10 hover:border-danger/30 font-bold rounded-xl transition-all"
                                 >
-                                    Logout
+                                    Sign Out
                                 </button>
                             </div>
                         </div>
                     ) : (
                         <form onSubmit={handleUpdate} className="space-y-6">
-                            <div>
-                                <label htmlFor="username" className="block text-sm font-medium text-indigo-300 mb-2">
-                                    Username
-                                </label>
-                                <input
-                                    id="username"
-                                    type="text"
-                                    value={formData.username}
-                                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                                />
+                            <div className="text-center mb-8">
+                                <h2 className="text-2xl font-bold text-foreground">Edit Profile</h2>
+                                <p className="text-muted text-sm mt-1">Update your account information</p>
                             </div>
 
-                            <div>
-                                <label htmlFor="email" className="block text-sm font-medium text-indigo-300 mb-2">
-                                    Email
-                                </label>
-                                <input
-                                    id="email"
-                                    type="email"
-                                    value={formData.email}
-                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                                />
+                            <div className="space-y-4">
+                                <div>
+                                    <label htmlFor="username" className="block text-sm font-semibold text-foreground mb-2">
+                                        Username
+                                    </label>
+                                    <input
+                                        id="username"
+                                        type="text"
+                                        value={formData.username}
+                                        onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                                        className="w-full px-4 py-3 bg-surface-highlight border border-border rounded-xl text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label htmlFor="email" className="block text-sm font-semibold text-foreground mb-2">
+                                        Email Address
+                                    </label>
+                                    <input
+                                        id="email"
+                                        type="email"
+                                        value={formData.email}
+                                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                        className="w-full px-4 py-3 bg-surface-highlight border border-border rounded-xl text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+                                    />
+                                </div>
                             </div>
 
-                            <div className="flex gap-4">
+                            <div className="flex gap-4 pt-6">
                                 <button
                                     type="submit"
-                                    className="flex-1 py-3 px-6 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold rounded-xl shadow-lg transition-all"
+                                    className="flex-1 py-3.5 px-6 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg transition-all"
                                 >
                                     Save Changes
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setEditing(false)}
-                                    className="flex-1 py-3 px-6 bg-white/10 border border-white/20 hover:bg-white/20 text-white font-semibold rounded-xl transition-all"
+                                    className="flex-1 py-3.5 px-6 bg-surface-highlight text-foreground border border-border font-bold rounded-xl transition-all"
                                 >
                                     Cancel
                                 </button>

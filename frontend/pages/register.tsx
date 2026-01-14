@@ -42,32 +42,39 @@ export default function Register() {
 
             router.push('/dashboard')
         } catch (err: any) {
-            setError(err.response?.data?.message || 'Registration failed. Please try again.')
+            setError(err.response?.data?.error || 'Registration failed. Please try again.')
         } finally {
             setLoading(false)
         }
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-cyan-900 via-blue-900 to-indigo-900">
-            <div className="absolute inset-0 bg-black/20" />
+        <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-accent/5 rounded-full blur-[120px]"></div>
+            </div>
 
-            <div className="relative w-full max-w-md px-6">
-                <div className="bg-white/10 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-white/20">
-                    <div className="text-center mb-8">
-                        <h1 className="text-4xl font-bold text-white mb-2">DeltaUp</h1>
-                        <p className="text-cyan-200">Create your account</p>
+            <div className="relative w-full max-w-md animate-slideUp">
+                <div className="glass-panel rounded-3xl p-10 shadow-2xl">
+                    <div className="text-center mb-10">
+                        <Link href="/" className="inline-flex items-center justify-center w-14 h-14 bg-primary rounded-2xl mb-6 shadow-lg shadow-primary/20">
+                            <svg className="w-8 h-8 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                        </Link>
+                        <h1 className="text-3xl font-bold text-foreground">Join DeltaUp</h1>
+                        <p className="text-muted mt-2">Start your financial journey today</p>
                     </div>
 
                     {error && (
-                        <div className="bg-red-500/20 border border-red-500/50 text-red-200 px-4 py-3 rounded-xl mb-6">
+                        <div className="bg-danger/10 border border-danger/20 text-danger px-4 py-3 rounded-xl mb-6 text-sm font-medium">
                             {error}
                         </div>
                     )}
 
                     <form onSubmit={handleSubmit} className="space-y-5">
                         <div>
-                            <label htmlFor="username" className="block text-sm font-medium text-cyan-200 mb-2">
+                            <label htmlFor="username" className="block text-sm font-semibold text-foreground mb-2">
                                 Username
                             </label>
                             <input
@@ -76,14 +83,14 @@ export default function Register() {
                                 required
                                 value={formData.username}
                                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
+                                className="w-full px-4 py-3 bg-surface-highlight border border-border rounded-xl text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all font-sans"
                                 placeholder="johndoe"
                             />
                         </div>
 
                         <div>
-                            <label htmlFor="email" className="block text-sm font-medium text-cyan-200 mb-2">
-                                Email
+                            <label htmlFor="email" className="block text-sm font-semibold text-foreground mb-2">
+                                Email Address
                             </label>
                             <input
                                 id="email"
@@ -91,13 +98,13 @@ export default function Register() {
                                 required
                                 value={formData.email}
                                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
-                                placeholder="you@example.com"
+                                className="w-full px-4 py-3 bg-surface-highlight border border-border rounded-xl text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all font-sans"
+                                placeholder="name@company.com"
                             />
                         </div>
 
                         <div>
-                            <label htmlFor="password" className="block text-sm font-medium text-cyan-200 mb-2">
+                            <label htmlFor="password" className="block text-sm font-semibold text-foreground mb-2">
                                 Password
                             </label>
                             <input
@@ -106,13 +113,13 @@ export default function Register() {
                                 required
                                 value={formData.password}
                                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
+                                className="w-full px-4 py-3 bg-surface-highlight border border-border rounded-xl text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all font-sans"
                                 placeholder="••••••••"
                             />
                         </div>
 
                         <div>
-                            <label htmlFor="confirmPassword" className="block text-sm font-medium text-cyan-200 mb-2">
+                            <label htmlFor="confirmPassword" className="block text-sm font-semibold text-foreground mb-2">
                                 Confirm Password
                             </label>
                             <input
@@ -121,7 +128,7 @@ export default function Register() {
                                 required
                                 value={formData.confirmPassword}
                                 onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
+                                className="w-full px-4 py-3 bg-surface-highlight border border-border rounded-xl text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all font-sans"
                                 placeholder="••••••••"
                             />
                         </div>
@@ -129,16 +136,16 @@ export default function Register() {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full py-3 px-4 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-semibold rounded-xl shadow-lg transform hover:scale-[1.02] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full py-3.5 px-4 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {loading ? 'Creating account...' : 'Sign Up'}
+                            {loading ? 'Creating Account...' : 'Create Account'}
                         </button>
                     </form>
 
-                    <div className="mt-6 text-center">
-                        <p className="text-cyan-200">
+                    <div className="mt-8 text-center pt-8 border-t border-border">
+                        <p className="text-muted text-sm">
                             Already have an account?{' '}
-                            <Link href="/login" className="text-blue-300 hover:text-blue-200 font-semibold transition-colors">
+                            <Link href="/login" className="text-primary font-bold hover:underline">
                                 Sign in
                             </Link>
                         </p>

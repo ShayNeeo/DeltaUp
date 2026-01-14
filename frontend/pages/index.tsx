@@ -13,116 +13,85 @@ export default function Home() {
   }, [router])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 relative overflow-hidden">
-      {/* Animated background elements */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-pink-500 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
-        <div className="absolute top-1/2 left-1/2 w-80 h-80 bg-indigo-500 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
+    <div className="min-h-screen bg-background relative overflow-hidden font-sans">
+      {/* Background Decor */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-[10%] -right-[10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-3xl"></div>
+        <div className="absolute -bottom-[10%] -left-[10%] w-[40%] h-[40%] bg-accent/5 rounded-full blur-3xl"></div>
       </div>
 
       {/* Content */}
       <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 py-12">
         {/* Hero Section */}
-        <div className="max-w-4xl mx-auto text-center mb-12">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-white/10 backdrop-blur-md rounded-3xl mb-8 shadow-2xl">
-            <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="max-w-4xl mx-auto text-center mb-16 animate-slideUp">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-primary rounded-3xl mb-8 shadow-xl shadow-primary/20">
+            <svg className="w-12 h-12 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
 
-          <h1 className="text-6xl md:text-7xl font-bold text-white mb-6 tracking-tight">
+          <h1 className="text-5xl md:text-7xl font-bold text-foreground mb-6 tracking-tight">
             DeltaUp
           </h1>
 
-          <p className="text-2xl md:text-3xl text-purple-100 mb-4 font-light">
-            The Future of Financial Management
+          <p className="text-xl md:text-2xl text-muted mb-8 max-w-2xl mx-auto leading-relaxed">
+            The modern financial engine for your digital life. Secure, instant, and borderless.
           </p>
-
-          <p className="text-lg text-purple-200 max-w-2xl mx-auto">
-            Experience seamless transactions, instant transfers, and modern QR payments all in one secure platform
-          </p>
-        </div>
-
-        {/* Features Grid */}
-        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 w-full">
-          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 hover:bg-white/20 transition-all transform hover:scale-105">
-            <div className="text-5xl mb-4">⚡</div>
-            <h3 className="font-semibold text-white mb-2 text-xl">Lightning Fast</h3>
-            <p className="text-purple-200 text-sm">Instant money transfers with real-time processing</p>
-          </div>
-
-          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 hover:bg-white/20 transition-all transform hover:scale-105">
-            <div className="text-5xl mb-4">🔒</div>
-            <h3 className="font-semibold text-white mb-2 text-xl">Bank-Grade Security</h3>
-            <p className="text-purple-200 text-sm">Your data protected with enterprise-level encryption</p>
-          </div>
-
-          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 hover:bg-white/20 transition-all transform hover:scale-105">
-            <div className="text-5xl mb-4">📱</div>
-            <h3 className="font-semibold text-white mb-2 text-xl">QR Payments</h3>
-            <p className="text-purple-200 text-sm">Modern payment methods for the digital age</p>
-          </div>
         </div>
 
         {/* CTA Buttons */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row gap-4 mb-20 animate-slideUp" style={{ animationDelay: '100ms' }}>
           <Link
             href="/register"
-            className="px-10 py-4 bg-white text-purple-900 font-semibold rounded-xl shadow-2xl hover:shadow-white/20 transition-all transform hover:scale-105 hover:-translate-y-1 text-center"
+            className="px-10 py-4 bg-primary text-primary-foreground font-semibold rounded-xl shadow-lg shadow-primary/20 hover:scale-105 transition-all text-center"
           >
             Get Started Free
           </Link>
           <Link
             href="/login"
-            className="px-10 py-4 bg-white/10 backdrop-blur-md border border-white/30 text-white font-semibold rounded-xl hover:bg-white/20 transition-all text-center"
+            className="px-10 py-4 bg-surface border border-border text-foreground font-semibold rounded-xl hover:bg-surface-highlight transition-all text-center"
           >
             Sign In
           </Link>
         </div>
 
+        {/* Features Grid */}
+        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 w-full animate-slideUp" style={{ animationDelay: '200ms' }}>
+          <div className="glass-panel p-8 rounded-2xl group hover:border-primary/50 transition-colors">
+            <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 transition-transform">⚡</div>
+            <h3 className="font-bold text-foreground mb-3 text-xl">Instant Settlement</h3>
+            <p className="text-muted leading-relaxed">Send and receive funds in seconds, not days. Built on high-performance infrastructure.</p>
+          </div>
+
+          <div className="glass-panel p-8 rounded-2xl group hover:border-primary/50 transition-colors">
+            <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 transition-transform">🔒</div>
+            <h3 className="font-bold text-foreground mb-3 text-xl">Bank-Grade Trust</h3>
+            <p className="text-muted leading-relaxed">Enterprise encryption and ACID-compliant transactions ensure your assets are always safe.</p>
+          </div>
+
+          <div className="glass-panel p-8 rounded-2xl group hover:border-primary/50 transition-colors">
+            <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 transition-transform">📱</div>
+            <h3 className="font-bold text-foreground mb-3 text-xl">QR Ecosystem</h3>
+            <p className="text-muted leading-relaxed">Next-gen QR technology for contactless payments, scanning, and instant requests.</p>
+          </div>
+        </div>
+
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-8 max-w-2xl mx-auto mt-16">
+        <div className="flex flex-wrap justify-center gap-12 md:gap-24 mt-24 opacity-60">
           <div className="text-center">
-            <div className="text-4xl font-bold text-white mb-1">99.9%</div>
-            <div className="text-purple-200 text-sm">Uptime</div>
+            <div className="text-3xl font-bold text-foreground font-mono">99.9%</div>
+            <div className="text-muted text-xs uppercase tracking-widest mt-1">Uptime</div>
           </div>
           <div className="text-center">
-            <div className="text-4xl font-bold text-white mb-1">&lt;1s</div>
-            <div className="text-purple-200 text-sm">Transaction Speed</div>
+            <div className="text-3xl font-bold text-foreground font-mono">&lt;100ms</div>
+            <div className="text-muted text-xs uppercase tracking-widest mt-1">API Latency</div>
           </div>
           <div className="text-center">
-            <div className="text-4xl font-bold text-white mb-1">24/7</div>
-            <div className="text-purple-200 text-sm">Support</div>
+            <div className="text-3xl font-bold text-foreground font-mono">256-bit</div>
+            <div className="text-muted text-xs uppercase tracking-widest mt-1">Encryption</div>
           </div>
         </div>
       </div>
-
-      <style jsx>{`
-        @keyframes blob {
-          0% {
-            transform: translate(0px, 0px) scale(1);
-          }
-          33% {
-            transform: translate(30px, -50px) scale(1.1);
-          }
-          66% {
-            transform: translate(-20px, 20px) scale(0.9);
-          }
-          100% {
-            transform: translate(0px, 0px) scale(1);
-          }
-        }
-        .animate-blob {
-          animation: blob 7s infinite;
-        }
-        .animation-delay-2000 {
-          animation-delay: 2s;
-        }
-        .animation-delay-4000 {
-          animation-delay: 4s;
-        }
-      `}</style>
     </div>
   )
 }

@@ -109,12 +109,10 @@ export default function QRPayment() {
     }
   }, [scanning, facingMode])
 
-  // Toggle camera between front and rear
   const toggleCamera = () => {
     setFacingMode(prev => prev === 'environment' ? 'user' : 'environment')
   }
 
-  // Stop camera
   const stopScanning = () => {
     if (videoRef.current?.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream
@@ -126,7 +124,6 @@ export default function QRPayment() {
     setScannedData(null)
   }
 
-  // Scan QR code from video
   const scanQRCode = () => {
     const canvas = canvasRef.current
     const video = videoRef.current
@@ -147,23 +144,16 @@ export default function QRPayment() {
       })
 
       if (code) {
-        console.log('QR Code detected:', code.data)
-
-        // Pause scanning loop
         scanningRef.current = false
-
-        // Parse QR data
         try {
           const paymentData = JSON.parse(code.data) as ScannedPaymentData
           setScannedData(paymentData)
-
-          // Visual/Haptic feedback
           if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
             window.navigator.vibrate(200)
           }
         } catch (err) {
           setError('Invalid QR code format')
-          scanningRef.current = true // Resume scanning
+          scanningRef.current = true
         }
         return
       }
@@ -174,7 +164,6 @@ export default function QRPayment() {
     }
   }
 
-  // Cancel scanned payment
   const cancelScannedPayment = () => {
     setScannedData(null)
     scanningRef.current = true
@@ -182,7 +171,6 @@ export default function QRPayment() {
     requestAnimationFrame(scanQRCode)
   }
 
-  // Confirm and process scanned payment
   const confirmPayment = async () => {
     if (!scannedData) return
 
@@ -195,13 +183,9 @@ export default function QRPayment() {
       await transactionAPI.qrPayment({ qr_data: qrData })
       setSuccess(`Payment of $${scannedData.amount.toFixed(2)} sent successfully!`)
       stopScanning()
-
-      // Reset after 3 seconds
-      setTimeout(() => {
-        setSuccess('')
-      }, 3000)
+      setTimeout(() => setSuccess(''), 3000)
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Payment failed')
+      setError(err.response?.data?.error || 'Payment failed')
       setScannedData(null)
       scanningRef.current = true
       requestAnimationFrame(scanQRCode)
@@ -210,20 +194,14 @@ export default function QRPayment() {
     }
   }
 
-  useEffect(() => {
-    return () => {
-      stopScanning()
-    }
-  }, [])
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 py-12 px-4">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-bold text-slate-900 mb-2">QR Payment</h1>
-        <p className="text-slate-600 mb-8">Scan or generate QR codes for instant payments</p>
+    <div className="bg-background min-h-screen font-sans pb-12">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 animate-slideUp">
+        <h1 className="text-3xl font-bold text-foreground tracking-tight mb-2">QR Payment</h1>
+        <p className="text-muted mb-10">Scan to pay or generate your unique payment code</p>
 
         {/* Mode Switcher */}
-        <div className="flex gap-4 mb-8">
+        <div className="flex p-1 bg-surface-highlight rounded-2xl mb-10 border border-border">
           <button
             onClick={() => {
               setMode('generate')
@@ -231,12 +209,12 @@ export default function QRPayment() {
               setSuccess('')
               setError('')
             }}
-            className={`flex-1 py-3 px-6 rounded-xl font-semibold transition-all ${mode === 'generate'
-              ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
-              : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'
+            className={`flex-1 py-3.5 rounded-xl font-bold text-sm transition-all ${mode === 'generate'
+              ? 'bg-primary text-primary-foreground shadow-lg'
+              : 'text-muted hover:text-foreground'
               }`}
           >
-            📱 Generate QR
+            Generate Code
           </button>
           <button
             onClick={() => {
@@ -245,180 +223,131 @@ export default function QRPayment() {
               setSuccess('')
               setError('')
             }}
-            className={`flex-1 py-3 px-6 rounded-xl font-semibold transition-all ${mode === 'scan'
-              ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
-              : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'
+            className={`flex-1 py-3.5 rounded-xl font-bold text-sm transition-all ${mode === 'scan'
+              ? 'bg-primary text-primary-foreground shadow-lg'
+              : 'text-muted hover:text-foreground'
               }`}
           >
-            📷 Scan QR
+            Scan QR
           </button>
         </div>
 
         {/* Alerts */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl">
+          <div className="mb-8 p-4 bg-danger/10 border border-danger/20 text-danger rounded-xl text-sm font-medium animate-slideUp">
             {error}
           </div>
         )}
         {success && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 text-green-700 rounded-xl">
+          <div className="mb-8 p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-xl text-sm font-medium animate-slideUp">
             {success}
           </div>
         )}
 
-        {/* Generate QR Mode */}
+        {/* Generate Mode */}
         {mode === 'generate' && (
-          <div className="bg-white rounded-2xl shadow-lg p-8 border border-slate-200">
-            <h2 className="text-2xl font-semibold text-slate-900 mb-6">Generate Payment QR Code</h2>
+          <div className="glass-panel rounded-2xl p-8 sm:p-10 text-center">
+            <h2 className="text-2xl font-bold text-foreground mb-8">Receive Payment</h2>
 
-            <div className="space-y-4 mb-6">
+            <div className="max-w-md mx-auto space-y-6 mb-10 text-left">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Amount (USD)
-                </label>
+                <label className="block text-sm font-semibold text-foreground mb-2.5">Amount (USD)</label>
                 <input
                   type="number"
                   step="0.01"
-                  min="0"
+                  min="0.01"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full px-4 py-3.5 bg-surface-highlight border border-border rounded-xl text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary font-mono text-xl font-bold"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Description (Optional)
-                </label>
+                <label className="block text-sm font-semibold text-foreground mb-2.5">Description</label>
                 <input
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Payment for..."
-                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  placeholder="What is this for?"
+                  className="w-full px-4 py-3.5 bg-surface-highlight border border-border rounded-xl text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
                 />
               </div>
             </div>
 
             <button
               onClick={handleGenerateQR}
-              className="w-full py-4 px-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-xl shadow-lg transition-all text-lg"
+              className="w-full max-w-md py-4 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] transition-all"
             >
-              Generate QR Code
+              Generate Unique QR Code
             </button>
 
             {qrCodeUrl && (
-              <div className="mt-8 text-center">
-                <div className="inline-block p-6 bg-white rounded-2xl shadow-xl border-4 border-purple-500">
-                  <Image src={qrCodeUrl} alt="Payment QR Code" width={256} height={256} unoptimized={true} />
+              <div className="mt-12 animate-slideUp">
+                <div className="inline-block p-4 bg-white rounded-3xl shadow-2xl border border-border">
+                  <Image src={qrCodeUrl} alt="Payment QR Code" width={280} height={280} unoptimized={true} className="rounded-xl" />
                 </div>
-                <p className="mt-4 text-sm text-slate-600">
-                  Show this QR code to receive ${parseFloat(amount).toFixed(2)}
+                <p className="mt-6 text-sm text-muted">
+                  Show this code to the payer to receive <span className="font-bold text-foreground font-mono">${parseFloat(amount).toFixed(2)}</span>
                 </p>
               </div>
             )}
           </div>
         )}
 
-        {/* Scan QR Mode */}
+        {/* Scan Mode */}
         {mode === 'scan' && (
-          <div className="bg-white rounded-2xl shadow-lg p-8 border border-slate-200">
-            <h2 className="text-2xl font-semibold text-slate-900 mb-6">Scan QR Code to Pay</h2>
+          <div className="glass-panel rounded-2xl p-8 sm:p-10 text-center">
+            <h2 className="text-2xl font-bold text-foreground mb-8">Scan to Pay</h2>
 
             {!scanning ? (
-              <button
-                onClick={startScanning}
-                className="w-full py-4 px-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-xl shadow-lg transition-all text-lg"
-              >
-                📷 Start Camera
-              </button>
+              <div className="py-12">
+                <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-8 text-4xl text-primary animate-pulse">
+                  📷
+                </div>
+                <button
+                  onClick={startScanning}
+                  className="w-full max-w-md py-4 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-[1.01] transition-all"
+                >
+                  Start Camera Scanner
+                </button>
+              </div>
             ) : (
-              <div className="space-y-4">
-                <div className="relative bg-black rounded-3xl overflow-hidden shadow-2xl group border-4 border-purple-500/30">
-                  <video
-                    ref={videoRef}
-                    className="w-full h-[400px] object-cover"
-                    playsInline
-                  />
+              <div className="space-y-6">
+                <div className="relative bg-black rounded-3xl overflow-hidden shadow-2xl aspect-[4/3] max-w-2xl mx-auto border border-border">
+                  <video ref={videoRef} className="w-full h-full object-cover" playsInline />
                   <canvas ref={canvasRef} className="hidden" />
 
-                  {/* Viewfinder Overlay */}
-                  <div className="absolute inset-0 flex items-center justify-center p-8 pointer-events-none">
-                    <div className="relative w-full aspect-square max-w-[280px]">
-                      {/* Corners */}
-                      <div className="absolute top-0 left-0 w-8 h-8 border-l-4 border-t-4 border-purple-500 rounded-tl-lg"></div>
-                      <div className="absolute top-0 right-0 w-8 h-8 border-r-4 border-t-4 border-purple-500 rounded-tr-lg"></div>
-                      <div className="absolute bottom-0 left-0 w-8 h-8 border-l-4 border-b-4 border-purple-500 rounded-bl-lg"></div>
-                      <div className="absolute bottom-0 right-0 w-8 h-8 border-r-4 border-b-4 border-purple-500 rounded-br-lg"></div>
-
-                      {/* Animated Scanning Line */}
-                      <div className="absolute left-0 right-0 h-1 bg-gradient-to-r from-transparent via-purple-400 to-transparent shadow-[0_0_15px_rgba(168,85,247,0.8)] animate-scanner"></div>
-                    </div>
+                  {/* Scanner UI Overlays */}
+                  <div className="absolute inset-0 border-[40px] border-black/40 pointer-events-none"></div>
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border-2 border-primary rounded-3xl pointer-events-none">
+                    <div className="absolute inset-0 bg-primary/5"></div>
+                    {/* Corner accents */}
+                    <div className="absolute -top-1 -left-1 w-8 h-8 border-t-4 border-l-4 border-primary rounded-tl-xl"></div>
+                    <div className="absolute -top-1 -right-1 w-8 h-8 border-t-4 border-r-4 border-primary rounded-tr-xl"></div>
+                    <div className="absolute -bottom-1 -left-1 w-8 h-8 border-b-4 border-l-4 border-primary rounded-bl-xl"></div>
+                    <div className="absolute -bottom-1 -right-1 w-8 h-8 border-b-4 border-r-4 border-primary rounded-br-xl"></div>
                   </div>
 
-                  {/* Shading Layer */}
-                  <div className="absolute inset-0 bg-black/20 pointer-events-none"></div>
-
-                  {/* Camera Toggle Button Overlay */}
-                  <button
-                    onClick={toggleCamera}
-                    disabled={!!scannedData}
-                    className="absolute top-6 right-6 p-4 bg-white/10 hover:bg-white/20 text-white rounded-full shadow-lg transition-all backdrop-blur-md border border-white/20 group-hover:scale-110 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={`Switch to ${facingMode === 'environment' ? 'front' : 'rear'} camera`}
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                  </button>
-
-                  <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/40 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/10">
-                    <p className="text-white text-xs font-medium tracking-wider uppercase">
-                      {scannedData ? '✓ QR Code Detected' : 'Scanning for QR code...'}
-                    </p>
-                  </div>
-
-                  {/* Confirmation Modal Overlay */}
+                  {/* Confirmation Modal */}
                   {scannedData && (
-                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-fadeIn">
-                      <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
-                        <div className="text-center mb-4">
-                          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                            <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
+                    <div className="absolute inset-0 bg-background/95 backdrop-blur-sm flex items-center justify-center p-6 animate-slideUp">
+                      <div className="bg-surface rounded-2xl p-8 max-w-xs w-full shadow-2xl border border-border">
+                        <h3 className="text-xl font-bold text-foreground mb-6">Payment Details</h3>
+                        <div className="space-y-4 mb-8 text-left">
+                          <div className="pb-3 border-b border-border flex justify-between">
+                            <span className="text-muted text-sm">Amount:</span>
+                            <span className="font-mono font-bold text-primary">${scannedData.amount.toFixed(2)}</span>
                           </div>
-                          <h3 className="text-xl font-bold text-slate-900">Payment Confirmation</h3>
-                        </div>
-
-                        <div className="space-y-3 mb-6">
-                          <div className="flex justify-between items-center pb-2 border-b border-slate-200">
-                            <span className="text-slate-600">Amount:</span>
-                            <span className="text-2xl font-bold text-purple-600">${scannedData.amount.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between items-center pb-2 border-b border-slate-200">
-                            <span className="text-slate-600">To Account:</span>
-                            <span className="font-mono text-sm text-slate-900">{scannedData.account}</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-slate-600">Description:</span>
-                            <span className="text-slate-900">{scannedData.description}</span>
+                          <div className="pb-3 border-b border-border flex justify-between">
+                            <span className="text-muted text-sm">To:</span>
+                            <span className="font-mono text-xs truncate max-w-[120px]">{scannedData.account}</span>
                           </div>
                         </div>
 
-                        <div className="flex gap-3">
-                          <button
-                            onClick={cancelScannedPayment}
-                            disabled={loading}
-                            className="flex-1 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-all disabled:opacity-50"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={confirmPayment}
-                            disabled={loading}
-                            className="flex-1 py-3 px-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-xl transition-all disabled:opacity-50"
-                          >
-                            {loading ? 'Processing...' : 'Confirm Payment'}
+                        <div className="grid grid-cols-2 gap-3">
+                          <button onClick={cancelScannedPayment} className="py-3 px-4 bg-surface-highlight hover:bg-border rounded-xl font-bold text-sm transition-all">Cancel</button>
+                          <button onClick={confirmPayment} disabled={loading} className="py-3 px-4 bg-primary text-primary-foreground rounded-xl font-bold text-sm shadow-lg shadow-primary/20 transition-all">
+                            {loading ? '...' : 'Pay Now'}
                           </button>
                         </div>
                       </div>
@@ -426,32 +355,14 @@ export default function QRPayment() {
                   )}
                 </div>
 
-                <style jsx>{`
-                  @keyframes scanner {
-                    0% { top: 0%; opacity: 0; }
-                    10% { opacity: 1; }
-                    90% { opacity: 1; }
-                    100% { top: 100%; opacity: 0; }
-                  }
-                  .animate-scanner {
-                    position: absolute;
-                    animation: scanner 2s linear infinite;
-                  }
-                  @keyframes fadeIn {
-                    from { opacity: 0; }
-                    to { opacity: 1; }
-                  }
-                  .animate-fadeIn {
-                    animation: fadeIn 0.3s ease-out;
-                  }
-                `}</style>
-
-                <button
-                  onClick={stopScanning}
-                  className="w-full py-3 px-6 bg-slate-600 hover:bg-slate-700 text-white font-semibold rounded-xl transition-all"
-                >
-                  Stop Camera
-                </button>
+                <div className="flex gap-4 justify-center">
+                   <button onClick={toggleCamera} className="py-3 px-6 bg-surface-highlight border border-border rounded-xl font-bold text-sm hover:bg-border transition-all flex items-center gap-2">
+                    🔄 Switch Camera
+                  </button>
+                  <button onClick={stopScanning} className="py-3 px-6 bg-danger/10 text-danger border border-danger/20 rounded-xl font-bold text-sm hover:bg-danger/20 transition-all">
+                    Stop Scanner
+                  </button>
+                </div>
               </div>
             )}
           </div>
