@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { OpenRouter } from '@openrouter/sdk'
-import { getUser } from '@/lib/api'
+import { getUser, transactionAPI } from '@/lib/api'
+import { externalAPI } from '@/lib/external'
 
 interface Message {
     role: 'user' | 'assistant' | 'system'
@@ -58,14 +59,12 @@ export default function Chatbot({ isOpen, onClose }: ChatbotProps) {
         if (isOpen) {
             const user = getUser()
             setCurrentUser(user)
-            setMessages([
-                {
-                    role: 'assistant',
-                    content: user
-                        ? `Hi ${user.username}! I'm your DeltaUp assistant. How can I help with account ${user.account_number}?`
-                        : 'Hi! I\'m your DeltaUp assistant. Please log in for personalized help.'
-                }
-            ])
+            setMessages([{
+                role: 'assistant',
+                content: user
+                    ? `Hi ${user.username}! I'm your DeltaUp assistant. How can I help with account ${user.account_number}?`
+                    : 'Hi! I\'m your DeltaUp assistant. Please log in for personalized help.'
+            }])
         }
     }, [isOpen])
 
@@ -78,35 +77,52 @@ export default function Chatbot({ isOpen, onClose }: ChatbotProps) {
         onClose()
     }
 
+    // --- TOOL EXECUTION LOGIC ---
+    const executeTool = async (toolName: string, args: string): Promise<string> => {
+        console.log(`Executing tool: ${toolName} with args: ${args}`)
+        try {
+            switch (toolName) {
+                case 'get_balance':
+                    const balance = await transactionAPI.getBalance()
+                    return JSON.stringify(balance)
+                case 'get_transactions':
+                    const transactions = await transactionAPI.getTransactions()
+                    // Limit to last 5 to save tokens
+                    const recent = Array.isArray(transactions) ? transactions.slice(0, 5) : []
+                    return JSON.stringify(recent)
+                case 'get_market_prices':
+                    const prices = await externalAPI.getMarketData()
+                    return JSON.stringify(prices)
+                default:
+                    return `Error: Tool ${toolName} not found.`
+            }
+        } catch (error: any) {
+            return `Error executing ${toolName}: ${error.message}`
+        }
+    }
+
     const sendMessage = async () => {
         if (!input.trim() || loading) return
 
         const userMessage: Message = { role: 'user', content: input }
-
-        // Context Optimization: Keep last 10 messages + system prompt
-        // This simulates "auto summarize/load new context" by maintaining a sliding window
-        const history = messages.length > 20 ? messages.slice(messages.length - 20) : messages;
-
-        setMessages(prev => [...prev, userMessage])
+        
+        // We add the user message to the UI state immediately
+        const newMessages = [...messages, userMessage]
+        setMessages(newMessages)
         setInput('')
         setLoading(true)
 
         try {
             const apiKey = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || ''
-
-            if (!apiKey) {
-                setMessages(prev => [...prev, {
-                    role: 'assistant',
-                    content: 'Error: OpenRouter API key not configured.'
-                }])
-                setLoading(false)
-                return
-            }
+            if (!apiKey) throw new Error('API Key missing')
 
             const openrouter = new OpenRouter({ apiKey })
 
-            // Build personalized system context
+            // Context: Last 20 messages to keep context window manageable
+            const history = newMessages.length > 20 ? newMessages.slice(newMessages.length - 20) : newMessages
+
             const systemContent = `
+
 You are a helpful assistant for DeltaUp.
 Current User: ${currentUser?.username || 'Guest'}
 Account Number: ${currentUser?.account_number || 'N/A'}
@@ -114,63 +130,80 @@ Account Number: ${currentUser?.account_number || 'N/A'}
 Knowledge Base:
 ${KNOWLEDGE_BASE}
 
-Instructions:
-- Use the user's name and account number when relevant.
-- Keep answers clear and concise (optimize tokens).
-- If context is lost, politely ask for clarification.
-`
-            const contextMessage: Message = {
-                role: 'system',
-                content: systemContent
-            }
+--- TOOL USE INSTRUCTIONS ---
+You have access to the following tools to fetch real-time data. 
+Use them when the user asks for current balance, recent transactions, or crypto prices.
 
-            const stream = await openrouter.chat.send({
+Tools:
+- get_balance: Returns the user's current account balance.
+- get_transactions: Returns the user's recent transaction history.
+- get_market_prices: Returns current cryptocurrency prices (Bitcoin, Ethereum, etc.) from CoinGecko.
+
+To use a tool, your response must be ONLY the following format:
+TOOL_CALL: <tool_name>
+
+Example:
+User: "What is my balance?"
+Assistant: TOOL_CALL: get_balance
+
+User: "Show my last transactions"
+Assistant: TOOL_CALL: get_transactions
+
+User: "What is the price of Bitcoin?"
+Assistant: TOOL_CALL: get_market_prices
+
+After the tool result is provided by the system, you will answer the user's question naturally.
+`
+            const contextMessage: Message = { role: 'system', content: systemContent }
+
+            // --- FIRST LLM CALL ---
+            const completion = await openrouter.chat.send({
                 model: 'xiaomi/mimo-v2-flash:free',
                 messages: [
                     contextMessage,
-                    ...history.map(m => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content })),
-                    { role: 'user', content: input }
-                ],
-                stream: true,
-                streamOptions: {
-                    includeUsage: true
-                }
+                    ...history.map(m => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content }))
+                ]
             })
 
-            // Initialize an empty assistant message to stream into
-            setMessages(prev => [...prev, { role: 'assistant', content: '' }])
+            let responseContent = completion.choices[0]?.message?.content || ''
+            
+            // Check for Tool Call
+            if (responseContent.includes('TOOL_CALL:')) {
+                const toolName = responseContent.split('TOOL_CALL:')[1].trim()
+                
+                // Show a "Thinking..." state or "Fetching data..." in the UI if desired
+                // For now, we'll just execute silently and then reply
+                
+                const toolResult = await executeTool(toolName, '')
+                
+                // Add the tool execution and result to history (invisible to user in this simple UI, but visible to LLM)
+                // Actually, let's append it as a System message for the NEXT call
+                const updatedHistory = [
+                    ...history,
+                    { role: 'assistant', content: `TOOL_CALL: ${toolName}` } as Message,
+                    { role: 'system', content: `Tool '${toolName}' Result: ${toolResult}` } as Message
+                ]
 
-            let response = ''
-            for await (const chunk of stream) {
-                const content = chunk.choices[0]?.delta?.content
-                if (content) {
-                    response += content
-                    setMessages(prev => {
-                        const newMessages = [...prev]
-                        const lastMsg = newMessages[newMessages.length - 1]
-                        if (lastMsg && lastMsg.role === 'assistant') {
-                            newMessages[newMessages.length - 1] = {
-                                ...lastMsg,
-                                content: response
-                            }
-                        }
-                        return newMessages
-                    })
-                }
+                // --- SECOND LLM CALL (With Data) ---
+                const finalCompletion = await openrouter.chat.send({
+                    model: 'xiaomi/mimo-v2-flash:free',
+                    messages: [
+                        contextMessage,
+                        ...updatedHistory.map(m => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content }))
+                    ]
+                })
+
+                responseContent = finalCompletion.choices[0]?.message?.content || "I couldn't process the tool result."
             }
 
-            if (!response) {
-                setMessages(prev => [...prev, {
-                    role: 'assistant',
-                    content: 'I apologize, but I didn\'t receive a response.'
-                }])
-            }
+            // Update UI with final response
+            setMessages(prev => [...prev, { role: 'assistant', content: responseContent }])
 
         } catch (error: any) {
             console.error('Chatbot error:', error)
             setMessages(prev => [...prev, {
                 role: 'assistant',
-                content: 'Sorry, I encountered an error.'
+                content: 'Sorry, I encountered an error connecting to the AI service.'
             }])
         } finally {
             setLoading(false)
