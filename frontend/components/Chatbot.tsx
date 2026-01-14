@@ -167,9 +167,12 @@ After the tool result is provided by the system, you will answer the user's ques
 
             let responseContent = completion.choices[0]?.message?.content || ''
             
+            // Ensure responseContent is a string for .includes() check
+            const contentStr = typeof responseContent === 'string' ? responseContent : ''
+            
             // Check for Tool Call
-            if (responseContent.includes('TOOL_CALL:')) {
-                const toolName = responseContent.split('TOOL_CALL:')[1].trim()
+            if (contentStr.includes('TOOL_CALL:')) {
+                const toolName = contentStr.split('TOOL_CALL:')[1].trim()
                 
                 // Show a "Thinking..." state or "Fetching data..." in the UI if desired
                 // For now, we'll just execute silently and then reply
@@ -193,7 +196,11 @@ After the tool result is provided by the system, you will answer the user's ques
                     ]
                 })
 
-                responseContent = finalCompletion.choices[0]?.message?.content || "I couldn't process the tool result."
+                const finalContent = finalCompletion.choices[0]?.message?.content
+                responseContent = typeof finalContent === 'string' ? finalContent : "I couldn't process the tool result."
+            } else {
+                // If it wasn't a tool call, we still need to ensure responseContent is a string
+                responseContent = typeof responseContent === 'string' ? responseContent : ''
             }
 
             // Update UI with final response

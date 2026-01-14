@@ -157,7 +157,7 @@ export default function Dashboard() {
                         {marketData.map((coin) => (
                             <div key={coin.id} className="glass-card rounded-xl p-4">
                                 <div className="flex items-center gap-3 mb-3">
-                                    <img src={coin.image} alt={coin.name} className="w-8 h-8 rounded-full shadow-sm" />
+                                    <img src={coin.image} alt={coin.name} width={32} height={32} className="w-8 h-8 rounded-full shadow-sm" />
                                     <div>
                                         <p className="font-bold text-foreground leading-none">{coin.symbol.toUpperCase()}</p>
                                         <p className="text-xs text-muted mt-0.5">{coin.name}</p>
