@@ -42,10 +42,8 @@ export default function Layout({ children }: LayoutProps) {
           <div className="flex justify-between items-center h-16">
             {/* Logo */}
             <Link href="/dashboard" className="flex items-center gap-2.5 group">
-              <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 group-hover:scale-105 transition-transform">
-                <svg className="w-5 h-5 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
+              <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 group-hover:scale-105 transition-transform overflow-hidden">
+                <img src="/apple-touch-icon.png" alt="DeltaUp Logo" className="w-full h-full object-cover" />
               </div>
               <span className="font-bold text-xl tracking-tight">DeltaUp</span>
             </Link>
@@ -155,10 +153,8 @@ export default function Layout({ children }: LayoutProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-primary rounded-lg flex items-center justify-center">
-                <svg className="w-3.5 h-3.5 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
+              <div className="w-6 h-6 bg-primary rounded-lg flex items-center justify-center overflow-hidden">
+                <img src="/apple-touch-icon.png" alt="DeltaUp Logo" className="w-full h-full object-cover" />
               </div>
               <span className="font-semibold text-foreground">DeltaUp</span>
             </div>
