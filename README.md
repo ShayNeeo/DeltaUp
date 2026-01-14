@@ -1,75 +1,32 @@
-# DeltaUp - Fintech Application
+# DeltaUp
 
-Modern fintech application built with Next.js frontend and Rust backend.
+DeltaUp is a modern, high-performance fintech platform designed for secure and instant financial transactions. Built with a focus on speed, security, and user experience.
 
-## Tech Stack
+## 🚀 Features
 
-- **Frontend**: Next.js 15 + TailwindCSS
-- **Backend**: Rust (Actix-web)
-- **Database**: PostgreSQL 15
-- **Deployment**: Dokploy
+*   **Instant Transfers**: Real-time money transfer between accounts.
+*   **QR Payments**: Contactless payments using next-generation QR technology.
+*   **Bank-Grade Security**: ACID-compliant transactions and JWT-based authentication.
+*   **Real-time Dashboard**: Live balance tracking and transaction history.
+*   **Modern UI**: Responsive glassmorphism design with dark mode support.
 
-## Deployment
+## 🛠️ Tech Stack
 
-### Dokploy Configuration
+*   **Frontend**: Next.js 15, React, TailwindCSS
+*   **Backend**: Rust (Actix-web), SQLx
+*   **Database**: PostgreSQL 15
 
-1. **Database**: Create a PostgreSQL 15 database in Dokploy
-2. **Backend**:
-   - Use `Dockerfile` for production (pulls from GHCR)
-   - Use `Dockerfile.build` for development
-   - Set environment variables:
-     - `DATABASE_URL`: PostgreSQL connection string from Dokploy
-     - `JWT_SECRET`: Random secure string
-     - `DOMAIN`: Your domain
-     - `PORT`: 8000
+## 💻 Local Development
 
-3. **Frontend**:
-   - Use `Dockerfile` for production (pulls from GHCR)
-   - Use `Dockerfile.build` for development
-   - Set environment variables:
-     - `NEXT_PUBLIC_API_URL`: Backend API URL
-     - `NODE_ENV`: production
+1.  **Backend**:
+    ```bash
+    cd backend
+    cargo run
+    ```
 
-### Environment Variables
-
-Copy `.env.example` files and configure:
-
-```bash
-# Backend
-cd backend
-cp .env.example .env
-
-# Frontend
-cd frontend
-cp .env.example .env
-```
-
-## CI/CD
-
-GitHub Actions workflow builds multi-architecture images (AMD64 + ARM64) and pushes to GitHub Container Registry.
-
-Images:
-- `ghcr.io/shayneeo/deltaup-backend:latest`
-- `ghcr.io/shayneeo/deltaup-frontend:latest`
-
-## Development
-
-```bash
-# Backend
-cd backend
-cargo run
-
-# Frontend
-cd frontend
-npm install
-npm run dev
-```
-
-## Features
-
-- User authentication (JWT)
-- Bank transfers
-- QR payments
-- Balance checking
-- Transaction history
-- Profile management
+2.  **Frontend**:
+    ```bash
+    cd frontend
+    npm install
+    npm run dev
+    ```
