@@ -158,7 +158,7 @@ After the tool result is provided by the system, you will answer the user's ques
 
             // --- FIRST LLM CALL ---
             const completion = await openrouter.chat.send({
-                model: 'nvidia/nemotron-3-nano-30b-a3b:free',
+                model: 'tngtech/deepseek-r1t2-chimera:free',
                 messages: [
                     contextMessage,
                     ...history.map(m => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content }))
