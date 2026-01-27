@@ -189,7 +189,7 @@ After the tool result is provided by the system, you will answer the user's ques
 
                 // --- SECOND LLM CALL (With Data) ---
                 const finalCompletion = await openrouter.chat.send({
-                    model: 'xiaomi/mimo-v2-flash:free',
+                    model: 'tngtech/deepseek-r1t2-chimera:free',
                     messages: [
                         contextMessage,
                         ...updatedHistory.map(m => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content }))
